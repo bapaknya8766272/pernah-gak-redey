@@ -7,7 +7,7 @@
       "use": "@vercel/node"
     },
     {
-      "src": "**/*.html",
+      "src": "**/*.{html,css,js,jpg,jpeg,png,gif,svg,ico,webp,woff,woff2,ttf,eot}",
       "use": "@vercel/static"
     }
   ],
