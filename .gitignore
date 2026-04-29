@@ -1,0 +1,17 @@
+# Environment variables — JANGAN PERNAH di-commit!
+.env
+.env.local
+.env.production
+api/.env
+
+# Dependencies
+node_modules/
+.vercel/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

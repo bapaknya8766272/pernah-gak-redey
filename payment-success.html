@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pembayaran Berhasil - ALFA HOSTING</title>
+    <link rel="icon" type="image/jpeg" href="assets/alfa.jpg">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        .success-page {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            background: linear-gradient(135deg, var(--bg-body) 0%, rgba(16, 185, 129, 0.1) 100%);
+        }
+
+        .success-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 50px;
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+            animation: slideUp 0.5s ease;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .success-icon {
+            width: 100px;
+            height: 100px;
+            background: var(--gradient-accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 30px;
+            animation: scaleIn 0.5s ease 0.2s both;
+        }
+
+        @keyframes scaleIn {
+            from { transform: scale(0); }
+            to { transform: scale(1); }
+        }
+
+        .success-icon i {
+            font-size: 3rem;
+            color: white;
+        }
+
+        .success-card h1 {
+            font-size: 2rem;
+            margin-bottom: 15px;
+            color: var(--accent);
+        }
+
+        .success-card > p {
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+            line-height: 1.7;
+        }
+
+        .order-details {
+            background: var(--bg-glass);
+            border-radius: var(--radius);
+            padding: 25px;
+            margin-bottom: 30px;
+            text-align: left;
+        }
+
+        .order-details h3 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1rem;
+            margin-bottom: 20px;
+            color: var(--text-primary);
+        }
+
+        .order-details h3 i {
+            color: var(--primary);
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-row span:first-child {
+            color: var(--text-secondary);
+        }
+
+        .detail-row span:last-child {
+            font-weight: 600;
+        }
+
+        .success-actions {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .success-actions .btn {
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .next-steps {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 1px solid var(--border-color);
+            text-align: left;
+        }
+
+        .next-steps h3 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1rem;
+            margin-bottom: 15px;
+        }
+
+        .steps-list {
+            list-style: none;
+        }
+
+        .steps-list li {
+            padding: 10px 0;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .steps-list li i {
+            color: var(--accent);
+        }
+
+        .panel-info {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+            border: 1px solid var(--primary);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .panel-info h4 {
+            color: var(--primary);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .panel-info p {
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .panel-credentials {
+            background: var(--bg-body);
+            border-radius: var(--radius-sm);
+            padding: 15px;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        .panel-credentials div {
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+        }
+
+        .panel-credentials span {
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="success-page">
+        <div class="success-card">
+            <div class="success-icon">
+                <i class="fas fa-check"></i>
+            </div>
+            
+            <h1>Pembayaran Berhasil!</h1>
+            <p>Terima kasih telah berbelanja di ALFA HOSTING. Pesanan Anda sedang diproses.</p>
+            
+            <div class="order-details">
+                <h3><i class="fas fa-receipt"></i> Detail Pesanan</h3>
+                <div class="detail-row">
+                    <span>Order ID</span>
+                    <span id="order-id">-</span>
+                </div>
+                <div class="detail-row">
+                    <span>Tanggal</span>
+                    <span id="order-date">-</span>
+                </div>
+                <div class="detail-row">
+                    <span>Total</span>
+                    <span id="order-total" style="color: var(--accent);">-</span>
+                </div>
+                <div class="detail-row">
+                    <span>Status</span>
+                    <span style="color: var(--accent);"><i class="fas fa-check-circle"></i> Lunas</span>
+                </div>
+            </div>
+
+            <div id="panel-section" style="display: none;">
+                <div class="panel-info">
+                    <h4><i class="fas fa-server"></i> Informasi Panel</h4>
+                    <p>Panel Anda sedang dibuat. Detail akses akan dikirim ke WhatsApp Anda dalam 5-15 menit.</p>
+                    <div class="panel-credentials">
+                        <div><span>Status:</span> <span style="color: var(--warning);">Sedang diproses</span></div>
+                        <div><span>Estimasi:</span> 5-15 menit</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="success-actions">
+                <a href="index.html" class="btn btn-secondary">
+                    <i class="fas fa-home"></i> Kembali ke Beranda
+                </a>
+                <a href="https://wa.me/6282226769163" target="_blank" class="btn btn-primary">
+                    <i class="fab fa-whatsapp"></i> Hubungi Admin
+                </a>
+            </div>
+
+            <div class="next-steps">
+                <h3><i class="fas fa-list-ul"></i> Langkah Selanjutnya</h3>
+                <ul class="steps-list">
+                    <li><i class="fas fa-envelope"></i> Cek WhatsApp untuk detail pesanan</li>
+                    <li><i class="fas fa-clock"></i> Proses 5-15 menit untuk panel/VPS</li>
+                    <li><i class="fas fa-headset"></i> Hubungi admin jika ada kendala</li>
+                    <li><i class="fas fa-star"></i> Jangan lupa beri rating!</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="scripts.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const order = JSON.parse(localStorage.getItem('current_order'));
+            const urlParams = new URLSearchParams(window.location.search);
+            const orderId = urlParams.get('order_id') || urlParams.get('order') || (order ? order.orderId : '-');
+            
+            document.getElementById('order-id').textContent = orderId;
+            document.getElementById('order-date').textContent = new Date().toLocaleDateString('id-ID', {
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+            });
+            
+            if (order) {
+                document.getElementById('order-total').textContent = Utils.formatRupiah(order.total);
+                
+                // Update order status to completed in salesHistory
+                try {
+                    const salesHistory = JSON.parse(localStorage.getItem('salesHistory')) || [];
+                    const updated = salesHistory.map(sale => 
+                        sale.orderId === order.orderId ? { ...sale, status: 'completed' } : sale
+                    );
+                    localStorage.setItem('salesHistory', JSON.stringify(updated));
+                    localStorage.setItem('current_order', JSON.stringify({ ...order, status: 'completed' }));
+                } catch(e) { console.error(e); }
+
+                const hasPanel = order.items && order.items.some(item => item.category === 'panel');
+                if (hasPanel) {
+                    document.getElementById('panel-section').style.display = 'block';
+                }
+            }
+            
+            // Clear cart after successful payment
+            CartManager.clear();
+        });
+    </script>
+</body>
+</html>
