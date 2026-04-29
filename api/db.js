@@ -6,11 +6,21 @@
 import { MongoClient } from 'mongodb';
 
 const MONGODB_URI = process.env.MONGODB_URI;
-const DB_NAME = process.env.MONGODB_DB || 'alfahosting';
 
 if (!MONGODB_URI) {
     throw new Error('MONGODB_URI environment variable tidak diset. Tambahkan di Vercel Dashboard.');
 }
+
+// Ambil nama DB dari env, bersihkan karakter tidak valid, fallback ke 'alfahosting'
+function getDbName() {
+    const raw = process.env.MONGODB_DB || 'alfahosting';
+    // Hapus semua karakter setelah titik pertama (jika ada domain masuk ke sini)
+    // Nama DB MongoDB tidak boleh mengandung: /\. "$*<>:|?
+    const clean = raw.split('.')[0].replace(/[/\\. "$*<>:|?]/g, '');
+    return clean || 'alfahosting';
+}
+
+const DB_NAME = getDbName();
 
 let cachedClient = null;
 let cachedDb = null;
