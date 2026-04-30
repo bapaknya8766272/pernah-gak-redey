@@ -105,6 +105,18 @@ export default async function handler(req, res) {
             let user = await users.findOne({ email: googleUser.email });
 
             if (!user) {
+                // Cek device fingerprint
+                const deviceFingerprint = sanitize(req.body?.deviceFingerprint || '', 200);
+                if (deviceFingerprint) {
+                    const deviceUsed = await users.findOne({ deviceFingerprint });
+                    if (deviceUsed) {
+                        return res.status(409).json({
+                            error: 'Perangkat ini sudah digunakan untuk mendaftar akun lain. 1 perangkat hanya bisa mendaftar 1 akun.',
+                            code: 'DEVICE_ALREADY_REGISTERED'
+                        });
+                    }
+                }
+
                 // Buat user baru
                 const newUser = {
                     email: googleUser.email,
@@ -114,6 +126,8 @@ export default async function handler(req, res) {
                     provider: 'google',
                     emailVerified: googleUser.emailVerified,
                     role: 'user',
+                    deviceFingerprint: deviceFingerprint || null,
+                    registeredIP: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null,
                     createdAt: new Date(),
                     updatedAt: new Date()
                 };
@@ -148,6 +162,7 @@ export default async function handler(req, res) {
             const name = sanitize(req.body?.name, 100);
             const email = sanitize(req.body?.email, 200).toLowerCase();
             const password = req.body?.password;
+            const deviceFingerprint = sanitize(req.body?.deviceFingerprint || '', 200);
 
             if (!name || !email || !password) {
                 return res.status(400).json({ error: 'Nama, email, dan password diperlukan' });
@@ -160,6 +175,18 @@ export default async function handler(req, res) {
             }
 
             const users = await getCollection('users');
+
+            // Cek apakah device ini sudah pernah daftar akun lain
+            if (deviceFingerprint) {
+                const deviceUsed = await users.findOne({ deviceFingerprint });
+                if (deviceUsed) {
+                    return res.status(409).json({
+                        error: 'Perangkat ini sudah digunakan untuk mendaftar akun lain. 1 perangkat hanya bisa mendaftar 1 akun.',
+                        code: 'DEVICE_ALREADY_REGISTERED'
+                    });
+                }
+            }
+
             const existing = await users.findOne({ email });
             if (existing) return res.status(409).json({ error: 'Email sudah terdaftar' });
 
@@ -172,6 +199,8 @@ export default async function handler(req, res) {
                 passwordHash: hash,
                 passwordSalt: salt,
                 role: 'user',
+                deviceFingerprint: deviceFingerprint || null,
+                registeredIP: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null,
                 createdAt: new Date(),
                 updatedAt: new Date()
             };

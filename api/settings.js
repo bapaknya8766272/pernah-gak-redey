@@ -56,7 +56,7 @@ function decrypt(data) {
 }
 
 // Keys yang nilainya sensitif dan perlu dienkripsi
-const SENSITIVE_KEYS = ['qris_apikey', 'qris_keyorkut', 'openai_apikey', 'ptero_ptla', 'ptero_ptlc'];
+const SENSITIVE_KEYS = ['qris_apikey', 'qris_keyorkut', 'openai_apikey', 'ptero_ptla', 'ptero_ptlc', 'groq_apikey'];
 
 // ── Main Handler ──────────────────────────────────────────────
 export default async function handler(req, res) {
@@ -65,6 +65,28 @@ export default async function handler(req, res) {
 
     const adminToken = req.headers['x-admin-token'];
     const isAdmin = await verifyAdminToken(adminToken);
+
+    // Endpoint publik khusus untuk QRIS config (dipakai saat checkout)
+    // Hanya return nilai yang dibutuhkan frontend untuk payment, tidak expose semua
+    if (req.method === 'GET' && req.query.type === 'qris-public') {
+        const settings = await getCollection('settings');
+        const keys = ['qris_code', 'qris_merchant', 'qris_check_interval'];
+        const result = {};
+        for (const k of keys) {
+            const doc = await settings.findOne({ key: k });
+            if (doc) result[k] = doc.value;
+        }
+        // qris_apikey dan qris_keyorkut: decrypt dan return (dibutuhkan untuk API call)
+        const sensitiveKeys = ['qris_apikey', 'qris_keyorkut'];
+        for (const k of sensitiveKeys) {
+            const doc = await settings.findOne({ key: k });
+            if (doc?.value) {
+                try { result[k] = decrypt(doc.value); } catch { result[k] = ''; }
+            }
+        }
+        return res.status(200).json({ config: result });
+    }
+
     if (!isAdmin) return res.status(401).json({ error: 'Admin token tidak valid atau expired' });
 
     const settings = await getCollection('settings');
