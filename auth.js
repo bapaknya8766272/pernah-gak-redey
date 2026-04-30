@@ -4,8 +4,36 @@
  */
 
 // ============================================================
-// STATE
+// DEVICE FINGERPRINT — untuk batasi 1 device = 1 akun
 // ============================================================
+function getDeviceFingerprint() {
+    // Cek apakah sudah ada fingerprint tersimpan
+    let fp = localStorage.getItem('device_fp');
+    if (fp) return fp;
+
+    // Generate fingerprint dari karakteristik device
+    const components = [
+        navigator.userAgent,
+        navigator.language,
+        navigator.platform,
+        screen.width + 'x' + screen.height,
+        screen.colorDepth,
+        new Date().getTimezoneOffset(),
+        navigator.hardwareConcurrency || 0,
+        navigator.deviceMemory || 0
+    ].join('|');
+
+    // Hash sederhana
+    let hash = 0;
+    for (let i = 0; i < components.length; i++) {
+        const char = components.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+    }
+    fp = 'fp_' + Math.abs(hash).toString(16) + '_' + Date.now().toString(36);
+    localStorage.setItem('device_fp', fp);
+    return fp;
+}
 const AuthState = {
     user: null,
     token: null,
@@ -76,7 +104,7 @@ async function handleGoogleCallback(response) {
     try {
         const { ok, data } = await authFetch('/api/auth?action=google', {
             method: 'POST',
-            body: JSON.stringify({ idToken: response.credential })
+            body: JSON.stringify({ idToken: response.credential, deviceFingerprint: getDeviceFingerprint() })
         });
 
         if (!ok) throw new Error(data.error || 'Login Google gagal');
@@ -147,9 +175,16 @@ async function registerWithEmail() {
     try {
         const { ok, data } = await authFetch('/api/auth?action=register', {
             method: 'POST',
-            body: JSON.stringify({ name, email, password })
+            body: JSON.stringify({ name, email, password, deviceFingerprint: getDeviceFingerprint() })
         });
-        if (!ok) throw new Error(data.error || 'Registrasi gagal');
+        if (!ok) {
+            if (data.code === 'DEVICE_ALREADY_REGISTERED') {
+                showAuthError('⚠️ Perangkat ini sudah digunakan untuk daftar akun lain. 1 perangkat hanya bisa 1 akun.');
+            } else {
+                showAuthError(data.error || 'Registrasi gagal');
+            }
+            return;
+        }
         AuthState.save(data.token, data.user);
         onLoginSuccess();
     } catch (err) {
