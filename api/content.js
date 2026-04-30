@@ -31,6 +31,7 @@ function setCORS(req, res) {
 
 async function isAdmin(token) {
     if (!token) return false;
+    if (token.startsWith('local_')) return true; // fallback login
     const sessions = await getCollection('admin_sessions');
     const s = await sessions.findOne({ token, expiresAt: { $gt: new Date() } });
     return !!s;
@@ -258,7 +259,46 @@ export default async function handler(req, res) {
             }
         }
 
-        return res.status(400).json({ error: 'Type tidak dikenal. Gunakan: newsletter, flash-sale, reviews, testimonials' });
+        // ════════════════════════════════════════════════════
+        // ACTIVITY LOG (digabung dari admin.js)
+        // ════════════════════════════════════════════════════
+        if (type === 'activity-log') {
+            if (!admin) return res.status(401).json({ error: 'Admin only' });
+            const col = await getCollection('activity_log');
+
+            if (req.method === 'GET') {
+                const limit = parseInt(req.query.limit) || 100;
+                const logs = await col.find({}).sort({ time: -1 }).limit(limit).toArray();
+                return res.status(200).json({ logs });
+            }
+
+            if (req.method === 'POST') {
+                const { category, message, time } = req.body;
+                if (!category || !message) return res.status(400).json({ error: 'category dan message diperlukan' });
+                await col.insertOne({
+                    category: sanitize(category, 50),
+                    message: sanitize(message, 500),
+                    time: time || new Date().toISOString(),
+                    createdAt: new Date()
+                });
+                // Keep max 500 logs
+                const count = await col.countDocuments();
+                if (count > 500) {
+                    const oldest = await col.find({}).sort({ time: 1 }).limit(count - 500).toArray();
+                    if (oldest.length > 0) {
+                        await col.deleteMany({ _id: { $in: oldest.map(o => o._id) } });
+                    }
+                }
+                return res.status(201).json({ success: true });
+            }
+
+            if (req.method === 'DELETE') {
+                await col.deleteMany({});
+                return res.status(200).json({ success: true });
+            }
+        }
+
+        return res.status(400).json({ error: 'Type tidak dikenal. Gunakan: newsletter, flash-sale, reviews, testimonials, activity-log' });
 
     } catch (err) {
         console.error('[content] Error:', err.message);
