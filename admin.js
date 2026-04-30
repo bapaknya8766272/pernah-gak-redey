@@ -370,19 +370,17 @@ function initDashboard() {
 
 async function initProductsDB() {
     const token = AdminAuth.getToken();
-    if (!token || token.startsWith('local_')) return;
+    if (!token) return;
     try {
-        // Cek apakah produk sudah ada di DB
-        const res = await fetch('/api/products');
+        const res = await fetch('/api/products', { headers: { 'X-Admin-Token': token } });
         if (!res.ok) return;
         const data = await res.json();
-        if (data.source === 'default' || data.products?.length === 0) {
+        if (data.source === 'default' || !data.products?.length) {
             // Belum ada produk di DB, init dari default
             await fetch('/api/products?action=init', {
                 method: 'POST',
                 headers: { 'X-Admin-Token': token }
             });
-            // Reload cache
             ProductManager._cache = null;
             await ProductManager.loadFromDB();
             renderProductsTable();
@@ -1216,7 +1214,7 @@ function savePakasirSettings() { saveQRISSettings(); }
 // ── Sync settings ke MongoDB ──────────────────────────────────
 async function syncSettingsToDB(updates) {
     const token = AdminAuth.getToken();
-    if (!token || token.startsWith('local_')) return; // skip jika belum setup DB
+    if (!token) return; // hanya skip jika tidak ada token
     try {
         await fetch('/api/settings', {
             method: 'POST',
@@ -1229,7 +1227,7 @@ async function syncSettingsToDB(updates) {
 // ── Load settings dari DB (saat pertama masuk dashboard) ──────
 async function loadSettingsFromDB() {
     const token = AdminAuth.getToken();
-    if (!token || token.startsWith('local_')) return;
+    if (!token) return;
     try {
         const res = await fetch('/api/settings', { headers: { 'X-Admin-Token': token } });
         if (!res.ok) return;
@@ -3067,7 +3065,7 @@ async function renderFlashSale() {
     // Coba sync dari API (background, tidak blocking)
     try {
         const token = AdminAuth.getToken();
-        if (!token || token.startsWith('local_')) return;
+        if (!token) return;
         const res = await fetch('/api/content?type=flash-sale', { headers: { 'X-Admin-Token': token } });
         if (!res.ok) return;
         const { flashSales } = await res.json();
@@ -3105,7 +3103,7 @@ async function startFlashSale() {
 
     // Coba simpan ke DB (background)
     const token = AdminAuth.getToken();
-    if (token && !token.startsWith('local_')) {
+    if (token) {
         fetch('/api/content?type=flash-sale', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
