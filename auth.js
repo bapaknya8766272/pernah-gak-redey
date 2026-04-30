@@ -350,7 +350,7 @@ function renderUserInfoCard() {
 
 async function loadUserStats() {
     try {
-        const { ok, data } = await authFetch('/api/user');
+        const { ok, data } = await authFetch('/api/account?type=profile');
         if (!ok) return;
 
         const { stats } = data;
@@ -477,7 +477,7 @@ async function saveTransactionToDB(orderId, cart, total, promoCode, discount) {
     if (!AuthState.isLoggedIn()) return; // Hanya simpan jika user login
 
     try {
-        await authFetch('/api/transactions', {
+        await authFetch('/api/account?type=transactions', {
             method: 'POST',
             body: JSON.stringify({
                 orderId,

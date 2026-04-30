@@ -962,7 +962,7 @@ async function renderTestimonials() {
     const token = AdminAuth.getToken();
     let testimonials = [];
     try {
-        const res = await fetch('/api/testimonials?limit=100', { headers: { 'X-Admin-Token': token } });
+        const res = await fetch('/api/content?type=testimonials?limit=100', { headers: { 'X-Admin-Token': token } });
         if (res.ok) {
             const data = await res.json();
             testimonials = data.testimonials || [];
@@ -1049,7 +1049,7 @@ async function renderCustomers() {
     try {
         const [orderRes, testimonialRes] = await Promise.all([
             fetch('/api/orders', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ orders: [] })),
-            fetch('/api/testimonials?limit=200', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ testimonials: [] }))
+            fetch('/api/content?type=testimonials?limit=200', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ testimonials: [] }))
         ]);
 
         const orders = orderRes.orders || [];
