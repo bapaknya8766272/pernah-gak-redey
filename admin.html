@@ -575,40 +575,46 @@
                             </div>
                         </div>
                         <div class="settings-body">
-                            <div class="security-notice" style="margin-bottom:15px;">
-                                <i class="fas fa-info-circle"></i>
-                                <span>Dapatkan API Key, QRIS Code, Merchant ID, dan Key Orkut dari dashboard penyedia QRIS kamu.</span>
+                            <div class="security-notice" style="margin-bottom:15px;background:rgba(16,185,129,0.1);border-color:var(--accent);">
+                                <i class="fas fa-shield-alt" style="color:var(--accent);"></i>
+                                <span><strong>Aman!</strong> Credentials disimpan terenkripsi di MongoDB. Tidak pernah terekspos ke browser pengunjung.</span>
                             </div>
                             <div class="form-group">
                                 <label>API Key</label>
                                 <div class="input-password">
-                                    <input type="password" id="qris-apikey" placeholder="API Key QRIS">
+                                    <input type="password" id="qris-apikey" placeholder="Contoh: alfa2025">
                                     <button onclick="toggleInputPassword('qris-apikey')"><i class="fas fa-eye"></i></button>
                                 </div>
                             </div>
                             <div class="form-group">
                                 <label>QRIS Code (codeqr)</label>
-                                <input type="text" id="qris-code" placeholder="Kode QRIS kamu">
+                                <textarea id="qris-code" rows="3" placeholder="00020101021126670016COM.NOBUBANK..." style="font-size:0.75rem;font-family:monospace;"></textarea>
                             </div>
                             <div class="form-group">
                                 <label>Merchant ID</label>
-                                <input type="text" id="qris-merchant" placeholder="Merchant ID">
+                                <input type="text" id="qris-merchant" placeholder="Contoh: OK2385395">
                             </div>
                             <div class="form-group">
                                 <label>Key Orkut</label>
                                 <div class="input-password">
-                                    <input type="password" id="qris-keyorkut" placeholder="Key Orkut">
+                                    <input type="password" id="qris-keyorkut" placeholder="Key Orkut untuk cek status">
                                     <button onclick="toggleInputPassword('qris-keyorkut')"><i class="fas fa-eye"></i></button>
                                 </div>
                             </div>
                             <div class="form-group">
                                 <label>Interval Cek Status (ms)</label>
-                                <input type="number" id="qris-check-interval" placeholder="5000" min="3000" max="30000">
-                                <small>Default: 5000ms (5 detik). Min 3000ms.</small>
+                                <input type="number" id="qris-check-interval" placeholder="15000" min="5000" max="60000">
+                                <small>Default: 15000ms (15 detik). Min 5000ms.</small>
                             </div>
-                            <button class="btn btn-primary" onclick="saveQRISSettings()">
-                                <i class="fas fa-save"></i> Simpan Pengaturan QRIS
-                            </button>
+                            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                                <button class="btn btn-primary" onclick="saveQRISSettings()">
+                                    <i class="fas fa-save"></i> Simpan ke Database
+                                </button>
+                                <button class="btn btn-secondary" onclick="testQRISConnection()">
+                                    <i class="fas fa-plug"></i> Test Koneksi
+                                </button>
+                            </div>
+                            <div id="qris-test-result" style="margin-top:10px;font-size:0.85rem;"></div>
                         </div>
                     </div>
 

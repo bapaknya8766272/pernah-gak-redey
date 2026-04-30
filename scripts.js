@@ -1318,11 +1318,10 @@ const QRISPayment = {
     },
 
     _getConfig() {
+        // Credentials QRIS disimpan di server (Vercel env vars)
+        // Client hanya perlu tahu interval cek status
         return {
-            apikey:     localStorage.getItem('qris_apikey')    || '',
-            qrisCode:   localStorage.getItem('qris_code')      || '',
-            merchantId: localStorage.getItem('qris_merchant')  || '',
-            keyorkut:   localStorage.getItem('qris_keyorkut')  || ''
+            checkInterval: parseInt(localStorage.getItem('qris_check_interval') || '15000')
         };
     },
 
@@ -1368,47 +1367,40 @@ const QRISPayment = {
             saveTransactionToDB(orderId, cart, total, activePromo?.code || null, discount);
         }
 
-        // Buat QRIS
+        // Buat QRIS via server kita (credentials aman di server)
         Utils.showToast('Membuat QRIS pembayaran...', 'success');
-        this._showQRISModal(total, orderId, cfg);
+        this._showQRISModal(total, orderId);
     },
 
-    async _showQRISModal(amount, orderId, cfg) {
+    async _showQRISModal(amount, orderId) {
         this._openModal(amount, orderId, null, null);
 
         try {
-            const res = await fetch(
-                `https://website-apii-ten.vercel.app/api/orkut/createpayment?apikey=${encodeURIComponent(cfg.apikey)}&amount=${amount}&codeqr=${encodeURIComponent(cfg.qrisCode)}`
-            );
-
-            // Cek apakah response adalah JSON (bukan HTML error page)
-            const contentType = res.headers.get('content-type') || '';
-            if (!contentType.includes('application/json')) {
-                this._closeModal();
-                Utils.showToast('❌ QRIS belum dikonfigurasi. Login admin → Pengaturan → QRIS untuk mengisi API Key.', 'error');
-                return;
-            }
+            // Panggil API kita sendiri — server yang hubungi QRIS provider
+            const res = await fetch('/api/qris', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'create', amount, orderId })
+            });
 
             const json = await res.json();
 
-            if (!json?.result) {
+            if (!res.ok || !json.success) {
                 this._closeModal();
-                Utils.showToast('Gagal membuat QRIS. Periksa konfigurasi QRIS di admin.', 'error');
+                Utils.showToast(json.error || 'Gagal membuat QRIS. Hubungi admin.', 'error');
                 return;
             }
 
-            const data = json.result;
             this._state.active        = true;
             this._state.orderId       = orderId;
-            this._state.transactionId = data.transactionId;
+            this._state.transactionId = json.transactionId;
             this._state.amount        = amount;
 
-            this._openModal(amount, orderId, data.qrImageUrl, data.transactionId);
+            this._openModal(amount, orderId, json.qrImageUrl, json.transactionId);
 
             if (this._state.interval) clearInterval(this._state.interval);
-            // Ambil interval dari DB (sudah di-load ke localStorage oleh loadQRISConfig)
-            const checkInterval = parseInt(localStorage.getItem('qris_check_interval') || '5000');
-            this._state.interval = setInterval(() => this._checkStatus(cfg), checkInterval);
+            const checkInterval = parseInt(localStorage.getItem('qris_check_interval') || '15000');
+            this._state.interval = setInterval(() => this._checkStatus(), checkInterval);
 
         } catch(err) {
             this._closeModal();
@@ -1417,17 +1409,20 @@ const QRISPayment = {
         }
     },
 
-    async _checkStatus(cfg) {
+    async _checkStatus() {
         if (!this._state.active) { clearInterval(this._state.interval); return; }
         try {
-            const res = await fetch(
-                `https://website-apii-ten.vercel.app/api/orkut/cekstatus?apikey=${encodeURIComponent(cfg.apikey)}&merchant=${encodeURIComponent(cfg.merchantId)}&keyorkut=${encodeURIComponent(cfg.keyorkut)}`
-            );
+            const res = await fetch('/api/qris', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'check',
+                    transactionId: this._state.transactionId,
+                    amount: this._state.amount
+                })
+            });
             const json = await res.json();
-            if (!json?.data || !Array.isArray(json.data)) return;
-            const txn = json.data.find(item => item.transactionId === this._state.transactionId);
-            if (!txn) return;
-            if (txn.status === 'PAID' || Number(txn.amount) === this._state.amount) {
+            if (json.paid) {
                 this._onPaymentSuccess();
             }
         } catch(err) { console.error('QRIS check error:', err); }

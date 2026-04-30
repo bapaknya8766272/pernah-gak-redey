@@ -907,26 +907,43 @@ function clearAllOrders() {
 // ========================================
 // TESTIMONIALS (XSS-safe)
 // ========================================
-function renderTestimonials() {
+async function renderTestimonials() {
     const grid = document.getElementById('testimonials-grid');
     if (!grid) return;
-    
-    const testimonials = TestimonialManager.getAll().slice().reverse();
-    
+
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:30px;"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>`;
+
+    const token = AdminAuth.getToken();
+    let testimonials = [];
+    try {
+        const res = await fetch('/api/testimonials?limit=100', { headers: { 'X-Admin-Token': token } });
+        if (res.ok) {
+            const data = await res.json();
+            testimonials = data.testimonials || [];
+        }
+    } catch {}
+
+    // Fallback ke cache lokal
+    if (testimonials.length === 0) {
+        testimonials = TestimonialManager.getAll();
+    }
+
     if (testimonials.length === 0) {
         grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-comments" style="font-size:2rem;margin-bottom:10px;display:block;"></i>Belum ada testimoni</div>';
         return;
     }
 
-    grid.innerHTML = testimonials.map((t, index) => {
-        const stars = Array(5).fill(0).map((_, i) => 
+    grid.innerHTML = testimonials.map((t) => {
+        const stars = Array(5).fill(0).map((_, i) =>
             `<i class="${i < t.rating ? 'fas' : 'far'} fa-star" style="color: ${i < t.rating ? 'var(--warning)' : '#4b5563'};"></i>`
         ).join('');
-        
         const safeName = (t.name || 'Anonim').replace(/[<>]/g, '');
         const safeMsg = (t.message || '').replace(/[<>]/g, '');
         const initials = safeName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-        
+        const statusColor = t.status === 'approved' ? 'var(--accent)' : t.status === 'rejected' ? 'var(--danger)' : 'var(--warning)';
+        const statusLabel = t.status === 'approved' ? 'Disetujui' : t.status === 'rejected' ? 'Ditolak' : 'Pending';
+        const id = t._id || t.id;
+
         return `
             <div class="testimonial-admin-card">
                 <div class="testimonial-admin-header">
@@ -935,91 +952,105 @@ function renderTestimonials() {
                         <h4>${safeName}</h4>
                         <div class="testimonial-rating">${stars}</div>
                     </div>
+                    <span style="margin-left:auto;font-size:0.75rem;color:${statusColor};background:${statusColor}20;padding:3px 8px;border-radius:20px;">${statusLabel}</span>
                 </div>
                 <p class="testimonial-text">${safeMsg}</p>
                 <div class="testimonial-footer">
-                    <span>${Utils.formatDate(t.date)}</span>
-                    <button class="action-btn delete" onclick="deleteTestimonial(${index})" title="Hapus"><i class="fas fa-trash"></i></button>
+                    <span>${t.date || Utils.formatDate(t.createdAt)}</span>
+                    <div style="display:flex;gap:6px;">
+                        ${t.status !== 'approved' ? `<button class="action-btn active" onclick="approveTestimonial('${id}')" title="Setujui"><i class="fas fa-check"></i></button>` : ''}
+                        <button class="action-btn delete" onclick="deleteTestimonialDB('${id}')" title="Hapus"><i class="fas fa-trash"></i></button>
+                    </div>
                 </div>
-            </div>
-        `;
+            </div>`;
     }).join('');
 }
 
-function filterTestimonials() {
-    const query = document.getElementById('testi-search').value.toLowerCase();
-    const cards = document.querySelectorAll('.testimonial-admin-card');
-    cards.forEach(card => {
-        const text = card.textContent.toLowerCase();
-        card.style.display = text.includes(query) ? 'block' : 'none';
-    });
+async function approveTestimonial(id) {
+    const token = AdminAuth.getToken();
+    try {
+        await fetch(`/api/testimonials?id=${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+            body: JSON.stringify({ status: 'approved' })
+        });
+        addActivityLog('Testimoni', `Setujui testimoni ${id}`);
+        renderTestimonials();
+    } catch (e) { Swal.fire({ icon: 'error', title: 'Gagal', text: e.message, background: '#1a1a2e', color: '#fff' }); }
 }
 
-function deleteTestimonial(index) {
-    Swal.fire({
-        title: 'Hapus Testimoni?',
-        text: 'Testimoni akan dihapus!',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Ya, Hapus',
-        cancelButtonText: 'Batal',
-        background: '#1a1a2e',
-        color: '#fff',
-        confirmButtonColor: '#ef4444'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            const testimonials = TestimonialManager.getAll();
-            testimonials.splice(index, 1);
-            localStorage.setItem('testimonials', JSON.stringify(testimonials));
-            renderTestimonials();
-            Swal.fire({ icon: 'success', title: 'Terhapus', text: 'Testimoni berhasil dihapus!', background: '#1a1a2e', color: '#fff', timer: 1500, showConfirmButton: false });
-        }
-    });
+async function deleteTestimonialDB(id) {
+    const confirmed = await Swal.fire({ title: 'Hapus Testimoni?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya', cancelButtonText: 'Batal', background: '#1a1a2e', color: '#fff', confirmButtonColor: '#ef4444' });
+    if (!confirmed.isConfirmed) return;
+    const token = AdminAuth.getToken();
+    try {
+        await fetch(`/api/testimonials?id=${id}`, { method: 'DELETE', headers: { 'X-Admin-Token': token } });
+        addActivityLog('Testimoni', `Hapus testimoni ${id}`);
+        renderTestimonials();
+    } catch (e) { Swal.fire({ icon: 'error', title: 'Gagal', text: e.message, background: '#1a1a2e', color: '#fff' }); }
 }
 
-// ========================================
-// CUSTOMERS
-// ========================================
-function renderCustomers() {
+// Backward compat
+function deleteTestimonial(index) { renderTestimonials(); }
+
+async function renderCustomers() {
     const tbody = document.getElementById('customers-table-body');
     if (!tbody) return;
-    
-    const salesHistory = JSON.parse(localStorage.getItem('salesHistory')) || [];
-    const testimonials = TestimonialManager.getAll();
-    
-    // Aggregate customer data
-    const customers = {};
-    salesHistory.forEach(sale => {
-        const custName = sale.name || '-';
-        if (!customers[custName]) {
-            customers[custName] = { orders: 0, spent: 0, lastOrder: sale.date };
+
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:30px;"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>`;
+
+    const token = AdminAuth.getToken();
+    try {
+        const [orderRes, testimonialRes] = await Promise.all([
+            fetch('/api/orders', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ orders: [] })),
+            fetch('/api/testimonials?limit=200', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ testimonials: [] }))
+        ]);
+
+        const orders = orderRes.orders || [];
+        const testimonials = testimonialRes.testimonials || [];
+
+        // Aggregate customer data dari orders
+        const customers = {};
+        orders.forEach(order => {
+            const key = order.userEmail || order.userName || 'Tamu';
+            if (!customers[key]) {
+                customers[key] = { name: order.userName || 'Tamu', email: order.userEmail || '-', orders: 0, spent: 0, lastOrder: order.createdAt };
+            }
+            customers[key].orders++;
+            customers[key].spent += order.total || 0;
+            if (new Date(order.createdAt) > new Date(customers[key].lastOrder)) {
+                customers[key].lastOrder = order.createdAt;
+            }
+        });
+
+        const customerList = Object.values(customers);
+
+        const totalEl = document.getElementById('total-customers');
+        const activeEl = document.getElementById('active-customers');
+        const avgEl = document.getElementById('avg-rating');
+        if (totalEl) totalEl.textContent = customerList.length;
+        if (activeEl) activeEl.textContent = customerList.filter(c => c.orders > 1).length;
+        if (avgEl) avgEl.textContent = testimonials.length
+            ? (testimonials.reduce((s, t) => s + (t.rating || 0), 0) / testimonials.length).toFixed(1)
+            : '0';
+
+        if (customerList.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted);"><i class="fas fa-users" style="font-size:2rem;display:block;margin-bottom:10px;opacity:0.3;"></i>Belum ada pelanggan</td></tr>`;
+            return;
         }
-        customers[custName].orders++;
-        customers[custName].spent += sale.price * sale.quantity;
-        if (new Date(sale.date) > new Date(customers[custName].lastOrder)) {
-            customers[custName].lastOrder = sale.date;
-        }
-    });
-    
-    const customerList = Object.entries(customers).map(([name, data]) => ({
-        name,
-        ...data,
-        rating: testimonials.find(t => t.name === name)?.rating || 0
-    }));
-    
-    document.getElementById('total-customers').textContent = customerList.length;
-    document.getElementById('active-customers').textContent = customerList.filter(c => c.orders > 1).length;
-    document.getElementById('avg-rating').textContent = (testimonials.reduce((sum, t) => sum + t.rating, 0) / (testimonials.length || 1)).toFixed(1);
-    
-    tbody.innerHTML = customerList.map(c => `
-        <tr>
-            <td><strong>${c.name}</strong></td>
-            <td>${c.orders}</td>
-            <td>${Utils.formatRupiah(c.spent)}</td>
-            <td>${c.rating > 0 ? '<i class="fas fa-star" style="color: var(--warning);"></i> ' + c.rating : '-'}</td>
-            <td>${Utils.formatDate(c.lastOrder)}</td>
-        </tr>
-    `).join('');
+
+        tbody.innerHTML = customerList.map(c => `
+            <tr>
+                <td><strong>${c.name}</strong><br><small style="color:var(--text-muted);">${c.email}</small></td>
+                <td>${c.orders}</td>
+                <td>${Utils.formatRupiah(c.spent)}</td>
+                <td>-</td>
+                <td>${c.lastOrder ? new Date(c.lastOrder).toLocaleDateString('id-ID') : '-'}</td>
+            </tr>`).join('');
+
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted);">Gagal memuat data: ${err.message}</td></tr>`;
+    }
 }
 
 // ========================================
@@ -1071,26 +1102,49 @@ async function saveQRISSettings() {
     const code     = document.getElementById('qris-code').value.trim();
     const merchant = document.getElementById('qris-merchant').value.trim();
     const keyorkut = document.getElementById('qris-keyorkut').value.trim();
-    const interval = parseInt(document.getElementById('qris-check-interval').value) || 5000;
+    const interval = parseInt(document.getElementById('qris-check-interval').value) || 15000;
 
-    // Simpan ke localStorage (untuk akses cepat di frontend)
-    if (apikey)   localStorage.setItem('qris_apikey',   apikey);
-    if (code)     localStorage.setItem('qris_code',     code);
-    if (merchant) localStorage.setItem('qris_merchant', merchant);
-    if (keyorkut) localStorage.setItem('qris_keyorkut', keyorkut);
-    localStorage.setItem('qris_check_interval', Math.max(3000, interval).toString());
-
-    // Sync ke MongoDB (agar tersimpan permanen dan bisa diakses dari device lain)
+    // Simpan ke MongoDB (sumber kebenaran utama)
     await syncSettingsToDB({
         ...(apikey   ? { qris_apikey:   apikey }   : {}),
         ...(code     ? { qris_code:     code }     : {}),
         ...(merchant ? { qris_merchant: merchant } : {}),
         ...(keyorkut ? { qris_keyorkut: keyorkut } : {}),
-        qris_check_interval: Math.max(3000, interval).toString()
+        qris_check_interval: Math.max(5000, interval).toString()
     });
 
+    // Simpan juga ke localStorage sebagai cache lokal
+    if (code)     localStorage.setItem('qris_code',     code);
+    if (merchant) localStorage.setItem('qris_merchant', merchant);
+    localStorage.setItem('qris_check_interval', Math.max(5000, interval).toString());
+    // API key sensitif — TIDAK disimpan ke localStorage
+    if (apikey)   localStorage.setItem('qris_apikey_set', '1');
+    if (keyorkut) localStorage.setItem('qris_keyorkut_set', '1');
+
     addActivityLog('Pengaturan', 'Simpan konfigurasi QRIS ke database');
-    Swal.fire({ icon: 'success', title: 'Tersimpan ke Database!', text: 'Pengaturan QRIS tersimpan ke MongoDB. Bisa diakses dari device manapun.', background: '#1a1a2e', color: '#fff', timer: 2000, showConfirmButton: false });
+    Swal.fire({ icon: 'success', title: 'Tersimpan ke Database!', text: 'Credentials QRIS tersimpan terenkripsi di MongoDB. Aman dari browser pengunjung.', background: '#1a1a2e', color: '#fff', timer: 2500, showConfirmButton: false });
+}
+
+async function testQRISConnection() {
+    const resultEl = document.getElementById('qris-test-result');
+    if (resultEl) resultEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing koneksi QRIS...';
+    try {
+        const res = await fetch('/api/qris', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'create', amount: 1000, orderId: 'TEST-' + Date.now() })
+        });
+        const data = await res.json();
+        if (data.success && data.qrImageUrl) {
+            if (resultEl) resultEl.innerHTML = `<span style="color:var(--accent);"><i class="fas fa-check-circle"></i> Koneksi berhasil! QRIS siap digunakan.</span>`;
+            Swal.fire({ icon: 'success', title: 'QRIS Terhubung!', text: 'Pembayaran QRIS siap digunakan.', background: '#1a1a2e', color: '#fff' });
+        } else {
+            if (resultEl) resultEl.innerHTML = `<span style="color:var(--danger);"><i class="fas fa-times-circle"></i> ${data.error || 'Gagal'}</span>`;
+            Swal.fire({ icon: 'error', title: 'Gagal', text: data.error || 'Periksa API Key dan QRIS Code.', background: '#1a1a2e', color: '#fff' });
+        }
+    } catch (err) {
+        if (resultEl) resultEl.innerHTML = `<span style="color:var(--danger);"><i class="fas fa-times-circle"></i> Error: ${err.message}</span>`;
+    }
 }
 
 // Backward compat
@@ -1335,11 +1389,14 @@ window.deleteOrder = deleteOrder;
 window.clearAllOrders = clearAllOrders;
 window.filterTestimonials = filterTestimonials;
 window.deleteTestimonial = deleteTestimonial;
+window.deleteTestimonialDB = deleteTestimonialDB;
+window.approveTestimonial = approveTestimonial;
 window.saveQRISSettings = saveQRISSettings;
 window.savePakasirSettings = savePakasirSettings; // backward compat
 window.saveOpenAISettings = saveOpenAISettings; // backward compat
 window.saveGroqSettings = saveGroqSettings;
 window.testGroqConnection = testGroqConnection;
+window.testQRISConnection = testQRISConnection;
 window.savePteroSettings = savePteroSettings;
 window.testPteroConnection = testPteroConnection;
 window.saveSecuritySettings = saveSecuritySettings;
