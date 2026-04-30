@@ -36,7 +36,12 @@ export default async function handler(req, res) {
 
     const adminToken = req.headers['x-admin-token'];
     const admin = await isAdmin(adminToken);
-    if (!admin) return res.status(401).json({ error: 'Admin only' });
+
+    // POST (buat order baru dari checkout) — TIDAK butuh admin token
+    // GET, PUT, DELETE — butuh admin token
+    if (req.method !== 'POST' && !admin) {
+        return res.status(401).json({ error: 'Admin only' });
+    }
 
     const orders = await getCollection('orders');
     const { id, status } = req.query;

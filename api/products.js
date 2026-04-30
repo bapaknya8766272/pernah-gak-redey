@@ -154,11 +154,26 @@ export default async function handler(req, res) {
 
         // ── PUT — update produk ──────────────────────────────
         if (req.method === 'PUT') {
-            if (!admin) return res.status(401).json({ error: 'Admin only' });
             if (!id) return res.status(400).json({ error: 'id diperlukan' });
 
+            const { name, category: cat, price, stock, desc, features, recommend, outOfStock, _fromCheckout } = req.body;
+
+            // Update stok dari checkout (tidak butuh admin token)
+            // Hanya boleh kurangi stok dan set outOfStock — tidak bisa ubah nama/harga
+            if (_fromCheckout) {
+                if (stock === undefined) return res.status(400).json({ error: 'stock diperlukan' });
+                const newStock = Math.max(0, parseInt(stock));
+                await products.updateOne(
+                    { id },
+                    { $set: { stock: newStock, outOfStock: newStock <= 0, updatedAt: new Date() } }
+                );
+                return res.status(200).json({ success: true });
+            }
+
+            // Update lengkap — butuh admin token
+            if (!admin) return res.status(401).json({ error: 'Admin only' });
+
             const update = { updatedAt: new Date() };
-            const { name, category: cat, price, stock, desc, features, recommend } = req.body;
             if (name) update.name = sanitize(name, 200);
             if (cat) update.category = cat;
             if (price !== undefined) update.price = parseInt(price);
