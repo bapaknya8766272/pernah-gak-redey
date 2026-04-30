@@ -501,12 +501,11 @@ const ProductManager = {
             if (products[index].stock <= 0) products[index].outOfStock = true;
             localStorage.setItem('products', JSON.stringify(products));
             this._cache = products;
-            // Sync ke DB di background
-            const token = typeof AdminAuth !== 'undefined' ? AdminAuth.getToken() : '';
+            // Sync ke DB di background — pakai _fromCheckout agar tidak butuh admin token
             fetch(`/api/products?id=${productId}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
-                body: JSON.stringify({ stock: products[index].stock, outOfStock: products[index].outOfStock })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stock: products[index].stock, outOfStock: products[index].outOfStock, _fromCheckout: true })
             }).catch(() => {});
             return true;
         }
@@ -1381,11 +1380,20 @@ const QRISPayment = {
             const res = await fetch(
                 `https://website-apii-ten.vercel.app/api/orkut/createpayment?apikey=${encodeURIComponent(cfg.apikey)}&amount=${amount}&codeqr=${encodeURIComponent(cfg.qrisCode)}`
             );
+
+            // Cek apakah response adalah JSON (bukan HTML error page)
+            const contentType = res.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                this._closeModal();
+                Utils.showToast('❌ QRIS belum dikonfigurasi. Login admin → Pengaturan → QRIS untuk mengisi API Key.', 'error');
+                return;
+            }
+
             const json = await res.json();
 
             if (!json?.result) {
                 this._closeModal();
-                Utils.showToast('Gagal membuat QRIS. Coba lagi atau hubungi admin.', 'error');
+                Utils.showToast('Gagal membuat QRIS. Periksa konfigurasi QRIS di admin.', 'error');
                 return;
             }
 
