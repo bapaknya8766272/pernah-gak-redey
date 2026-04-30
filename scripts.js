@@ -8,18 +8,53 @@
 // ========================================
 const CONFIG = {
     QRIS: {
-        // Semua config disimpan di localStorage oleh admin — tidak sensitif
-        // API key dan kode QRIS diisi di Admin → Pengaturan → Pembayaran QRIS
+        // Config QRIS dibaca dari MongoDB via API saat checkout
+        // Fallback ke localStorage jika API tidak tersedia
         get apikey()     { return localStorage.getItem('qris_apikey')    || ''; },
         get qrisCode()   { return localStorage.getItem('qris_code')      || ''; },
         get merchantId() { return localStorage.getItem('qris_merchant')  || ''; },
         get keyorkut()   { return localStorage.getItem('qris_keyorkut')  || ''; }
     },
     OPENAI: {
-        // Model preference saja, bukan API key
         MODEL: localStorage.getItem('openai_model') || 'gpt-3.5-turbo'
     }
 };
+
+// Load QRIS config dari MongoDB saat halaman dimuat
+async function loadQRISConfig() {
+    try {
+        const res = await fetch('/api/settings?type=qris-public');
+        if (!res.ok) return;
+        const { config } = await res.json();
+        if (config.qris_apikey)          localStorage.setItem('qris_apikey',          config.qris_apikey);
+        if (config.qris_code)            localStorage.setItem('qris_code',            config.qris_code);
+        if (config.qris_merchant)        localStorage.setItem('qris_merchant',        config.qris_merchant);
+        if (config.qris_keyorkut)        localStorage.setItem('qris_keyorkut',        config.qris_keyorkut);
+        if (config.qris_check_interval)  localStorage.setItem('qris_check_interval',  config.qris_check_interval);
+    } catch { /* fallback ke localStorage */ }
+}
+
+// Track visitor real ke MongoDB
+async function trackVisitor() {
+    try {
+        // Visitor ID unik per browser (bukan per session)
+        let visitorId = localStorage.getItem('visitor_id');
+        if (!visitorId) {
+            visitorId = 'v_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now().toString(36);
+            localStorage.setItem('visitor_id', visitorId);
+        }
+
+        await fetch('/api/visitors', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Visitor-ID': visitorId },
+            body: JSON.stringify({
+                visitorId,
+                page: window.location.pathname,
+                referrer: document.referrer || ''
+            })
+        });
+    } catch { /* silent — tidak ganggu user */ }
+}
 
 // ========================================
 // PRODUCTS DATA - LENGKAP
@@ -504,32 +539,24 @@ const ProductManager = {
 };
 
 // ========================================
-// CART MANAGER
+// CART MANAGER — tetap localStorage (data sementara per user)
 // ========================================
 const CartManager = {
     getItems() {
-        try {
-            return JSON.parse(localStorage.getItem('cart')) || [];
-        } catch {
-            return [];
-        }
+        try { return JSON.parse(localStorage.getItem('cart')) || []; }
+        catch { return []; }
     },
-
     saveItems(items) {
         localStorage.setItem('cart', JSON.stringify(items));
         this.updateUI();
     },
-
     addItem(product, quantity = 1) {
         if (!rateLimiter.checkLimit(Utils.getClientId() + '_cart')) {
             Utils.showToast('Terlalu banyak permintaan. Coba lagi nanti.', 'error');
             return false;
         }
-
         const cart = this.getItems();
         const existingItem = cart.find(item => item.id === product.id);
-        
-        // Check stock
         if (product.category !== 'other') {
             const currentQty = existingItem ? existingItem.quantity : 0;
             if (currentQty + quantity > product.stock) {
@@ -537,40 +564,28 @@ const CartManager = {
                 return false;
             }
         }
-
         if (existingItem) {
             existingItem.quantity += quantity;
         } else {
-            cart.push({
-                id: product.id,
-                name: product.name,
-                price: product.price,
-                quantity: quantity,
-                category: product.category
-            });
+            cart.push({ id: product.id, name: product.name, price: product.price, quantity, category: product.category });
         }
-
         this.saveItems(cart);
         Utils.showToast(`${product.name} ditambahkan ke keranjang!`);
         return true;
     },
-
     removeItem(index) {
         const cart = this.getItems();
         cart.splice(index, 1);
         this.saveItems(cart);
         renderCart();
     },
-
     updateQuantity(index, newQuantity) {
         const cart = this.getItems();
         const product = ProductManager.getById(cart[index].id);
-        
         if (product && product.category !== 'other' && newQuantity > product.stock) {
             Utils.showToast('Stok tidak mencukupi!', 'error');
             return false;
         }
-
         if (newQuantity <= 0) {
             this.removeItem(index);
         } else {
@@ -580,20 +595,9 @@ const CartManager = {
         }
         return true;
     },
-
-    clear() {
-        localStorage.removeItem('cart');
-        this.updateUI();
-    },
-
-    getTotal() {
-        return this.getItems().reduce((total, item) => total + (item.price * item.quantity), 0);
-    },
-
-    getItemCount() {
-        return this.getItems().reduce((count, item) => count + item.quantity, 0);
-    },
-
+    clear() { localStorage.removeItem('cart'); this.updateUI(); },
+    getTotal() { return this.getItems().reduce((t, i) => t + (i.price * i.quantity), 0); },
+    getItemCount() { return this.getItems().reduce((c, i) => c + i.quantity, 0); },
     updateUI() {
         const countEl = document.getElementById('cart-count');
         if (countEl) {
@@ -605,31 +609,59 @@ const CartManager = {
 };
 
 // ========================================
-// TESTIMONIAL MANAGER
+// TESTIMONIAL MANAGER — pakai MongoDB via API
 // ========================================
 const TestimonialManager = {
-    init() {
-        if (!localStorage.getItem('testimonials')) {
-            localStorage.setItem('testimonials', JSON.stringify(defaultTestimonials));
+    _cache: null,
+    _cacheTime: 0,
+    _CACHE_TTL: 5 * 60 * 1000,
+
+    async loadFromDB() {
+        try {
+            const res = await fetch('/api/testimonials?limit=50');
+            if (!res.ok) throw new Error('API error');
+            const data = await res.json();
+            this._cache = data.testimonials || [];
+            this._cacheTime = Date.now();
+            return this._cache;
+        } catch {
+            return this._cache || defaultTestimonials;
         }
     },
 
-    getAll() {
-        return JSON.parse(localStorage.getItem('testimonials')) || defaultTestimonials;
+    init() {
+        this.loadFromDB().then(t => {
+            this._cache = t;
+            if (typeof renderTestimonials === 'function') renderTestimonials();
+            if (typeof renderRatingSummary === 'function') renderRatingSummary();
+        });
     },
 
-    add(testimonial) {
+    getAll() {
+        if (this._cache && (Date.now() - this._cacheTime) < this._CACHE_TTL) return this._cache;
+        return defaultTestimonials;
+    },
+
+    async add(testimonial) {
         if (!rateLimiter.checkLimit(Utils.getClientId() + '_testimonial')) {
             Utils.showToast('Terlalu banyak permintaan. Coba lagi nanti.', 'error');
             return false;
         }
-
-        const testimonials = this.getAll();
-        testimonial.id = Date.now();
-        testimonial.date = new Date().toISOString().split('T')[0];
-        testimonials.push(testimonial);
-        localStorage.setItem('testimonials', JSON.stringify(testimonials));
-        return true;
+        try {
+            const res = await fetch('/api/testimonials', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(testimonial)
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            this._cache = null; // invalidate cache
+            await this.loadFromDB();
+            return true;
+        } catch (e) {
+            Utils.showToast('Gagal kirim testimoni: ' + e.message, 'error');
+            return false;
+        }
     }
 };
 
@@ -1315,29 +1347,24 @@ const QRISPayment = {
             if (activePromo.discount)      discount = Math.floor(subtotal * activePromo.discount);
             if (activePromo.fixedDiscount) discount = activePromo.fixedDiscount;
         }
-        const total = Math.max(subtotal - discount, 1000); // min Rp 1.000
+        const total = Math.max(subtotal - discount, 1000);
         const orderId = Utils.generateOrderId();
-
-        // Simpan order ke localStorage
-        localStorage.setItem('current_order', JSON.stringify({
-            orderId, items: cart, total, status: 'pending',
-            createdAt: new Date().toISOString()
-        }));
 
         // Kurangi stok
         cart.forEach(item => ProductManager.updateStock(item.id, item.quantity));
         setTimeout(() => renderProducts(currentCategory || 'all'), 100);
 
-        // Simpan ke sales history
-        try {
-            const salesHistory = JSON.parse(localStorage.getItem('salesHistory')) || [];
-            cart.forEach(item => salesHistory.push({
-                ...item, orderId, date: new Date().toISOString(), status: 'pending'
-            }));
-            localStorage.setItem('salesHistory', JSON.stringify(salesHistory));
-        } catch(e) { console.error('Failed to save sales history:', e); }
+        // Simpan order ke MongoDB
+        const userInfo = typeof AuthState !== 'undefined' && AuthState.isLoggedIn()
+            ? { userId: AuthState.user._id, userName: AuthState.user.name, userEmail: AuthState.user.email }
+            : {};
+        fetch('/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Token': typeof AdminAuth !== 'undefined' ? AdminAuth.getToken() : '' },
+            body: JSON.stringify({ orderId, items: cart, total, discount, promoCode: activePromo?.code || null, status: 'pending', ...userInfo })
+        }).catch(() => {});
 
-        // Simpan ke MongoDB jika user login
+        // Simpan ke transaksi user jika login
         if (typeof saveTransactionToDB === 'function') {
             saveTransactionToDB(orderId, cart, total, activePromo?.code || null, discount);
         }
@@ -1348,7 +1375,6 @@ const QRISPayment = {
     },
 
     async _showQRISModal(amount, orderId, cfg) {
-        // Tampilkan modal loading
         this._openModal(amount, orderId, null, null);
 
         try {
@@ -1369,11 +1395,10 @@ const QRISPayment = {
             this._state.transactionId = data.transactionId;
             this._state.amount        = amount;
 
-            // Update modal dengan QR image
             this._openModal(amount, orderId, data.qrImageUrl, data.transactionId);
 
-            // Mulai polling cek status
             if (this._state.interval) clearInterval(this._state.interval);
+            // Ambil interval dari DB (sudah di-load ke localStorage oleh loadQRISConfig)
             const checkInterval = parseInt(localStorage.getItem('qris_check_interval') || '5000');
             this._state.interval = setInterval(() => this._checkStatus(cfg), checkInterval);
 
@@ -1386,45 +1411,49 @@ const QRISPayment = {
 
     async _checkStatus(cfg) {
         if (!this._state.active) { clearInterval(this._state.interval); return; }
-
         try {
             const res = await fetch(
                 `https://website-apii-ten.vercel.app/api/orkut/cekstatus?apikey=${encodeURIComponent(cfg.apikey)}&merchant=${encodeURIComponent(cfg.merchantId)}&keyorkut=${encodeURIComponent(cfg.keyorkut)}`
             );
             const json = await res.json();
-
             if (!json?.data || !Array.isArray(json.data)) return;
-
             const txn = json.data.find(item => item.transactionId === this._state.transactionId);
             if (!txn) return;
-
             if (txn.status === 'PAID' || Number(txn.amount) === this._state.amount) {
                 this._onPaymentSuccess();
             }
-        } catch(err) {
-            console.error('QRIS check error:', err);
-        }
+        } catch(err) { console.error('QRIS check error:', err); }
     },
 
     _onPaymentSuccess() {
         clearInterval(this._state.interval);
         this._state.active = false;
 
-        // Update status order ke completed
-        const trxId = 'ALFA' + Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
-        try {
-            const salesHistory = JSON.parse(localStorage.getItem('salesHistory')) || [];
-            salesHistory.forEach(s => {
-                if (s.orderId === this._state.orderId) s.status = 'completed';
-            });
-            localStorage.setItem('salesHistory', JSON.stringify(salesHistory));
-        } catch(e) {}
+        // Update status order ke completed di MongoDB
+        fetch(`/api/orders`, {
+            method: 'GET',
+            headers: { 'X-Admin-Token': '' }
+        }).then(async () => {
+            // Cari order by orderId dan update status
+            const res = await fetch('/api/orders', { headers: { 'X-Admin-Token': '' } });
+            if (res.ok) {
+                const data = await res.json();
+                const order = data.orders?.find(o => o.orderId === this._state.orderId);
+                if (order?._id) {
+                    fetch(`/api/orders?id=${order._id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': '' },
+                        body: JSON.stringify({ status: 'completed' })
+                    }).catch(() => {});
+                }
+            }
+        }).catch(() => {});
 
-        // Kosongkan keranjang
+        const trxId = 'ALFA' + Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+
         CartManager.clear();
         renderCart();
 
-        // Tampilkan sukses di modal
         const modal = document.getElementById('qris-payment-modal');
         if (modal) {
             modal.querySelector('#qris-loading-area').style.display = 'none';
@@ -1440,11 +1469,10 @@ const QRISPayment = {
                         <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span>🆔 Order ID</span><code style="font-size:0.8rem;">${this._state.orderId}</code></div>
                         <div style="display:flex;justify-content:space-between;"><span>🎫 Transaksi</span><code style="font-size:0.8rem;">${trxId}</code></div>
                     </div>
-                    <p style="color:var(--text-muted);font-size:0.85rem;margin-top:12px;">Admin akan segera memproses pesanan Anda. Hubungi via WhatsApp jika ada pertanyaan.</p>
+                    <p style="color:var(--text-muted);font-size:0.85rem;margin-top:12px;">Admin akan segera memproses pesanan Anda.</p>
                     <a href="https://wa.me/6282226769163?text=${encodeURIComponent('Halo, saya sudah bayar order ' + this._state.orderId + '. Mohon diproses ya!')}" target="_blank" class="btn btn-primary" style="margin-top:15px;display:inline-flex;gap:8px;"><i class="fab fa-whatsapp"></i> Konfirmasi ke Admin</a>
                 </div>`;
         }
-
         Utils.showToast('Pembayaran berhasil! 🎉', 'success');
     },
 
@@ -1793,9 +1821,15 @@ function processCheckout() {
 // INITIALIZATION & EVENT LISTENERS
 // ========================================
 document.addEventListener('DOMContentLoaded', () => {
-    // Track visitor
-    const visits = parseInt(localStorage.getItem('total_visits') || '0') + 1;
-    localStorage.setItem('total_visits', visits);
+    // Load QRIS config dari MongoDB (agar tersinkron antar device)
+    loadQRISConfig();
+
+    // Track visitor REAL ke MongoDB
+    trackVisitor();
+
+    // Track visitor lama (localStorage) — hapus
+    // const visits = parseInt(localStorage.getItem('total_visits') || '0') + 1;
+    // localStorage.setItem('total_visits', visits);
 
     // Init data
     ProductManager.init();
@@ -2230,22 +2264,25 @@ document.addEventListener('click', (e) => {
 });
 
 // ============================================================
-// FITUR WEBSITE 5: LIVE VISITOR COUNTER (simulasi realistis)
+// FITUR WEBSITE 5: LIVE VISITOR COUNTER — REAL dari MongoDB
 // ============================================================
 (function initLiveVisitors() {
-    const base = 12;
-    function getCount() {
-        // Simulate realistic visitor count based on time of day
-        const hour = new Date().getHours();
-        const peak = hour >= 9 && hour <= 22 ? 1 : 0.3;
-        return Math.floor(base * peak + Math.random() * 8 * peak);
-    }
-    function update() {
+    async function update() {
         const el = document.getElementById('live-visitor-count');
-        if (el) el.textContent = getCount();
+        if (!el) return;
+        try {
+            const res = await fetch('/api/visitors?type=live');
+            if (res.ok) {
+                const data = await res.json();
+                el.textContent = data.live || 1;
+            }
+        } catch {
+            // Fallback: tampilkan 1 (minimal ada pengunjung saat ini)
+            el.textContent = el.textContent || '1';
+        }
     }
     update();
-    setInterval(update, 15000); // update every 15s
+    setInterval(update, 30000); // update setiap 30 detik
 })();
 
 // ============================================================

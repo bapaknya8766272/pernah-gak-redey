@@ -458,27 +458,35 @@ function showSection(sectionName) {
 // ========================================
 function updateStats() {
     const products = ProductManager.getAll();
-    const salesHistory = JSON.parse(localStorage.getItem('salesHistory')) || [];
-    const visitors = parseInt(localStorage.getItem('total_visits') || '0');
-    
-    const revenue = salesHistory.reduce((total, sale) => total + (sale.price * sale.quantity), 0);
-    const lowStock = products.filter(p => p.category !== 'other' && p.stock <= 5).length;
-    
-    document.getElementById('total-revenue').textContent = Utils.formatRupiah(revenue);
-    document.getElementById('total-orders').textContent = salesHistory.length;
-    document.getElementById('total-visitors').textContent = visitors.toLocaleString('id-ID');
-    document.getElementById('total-products').textContent = products.length;
-    
-    const lowStockEl = document.getElementById('low-stock-count');
-    const stockAlert = document.getElementById('stock-alert');
-    const lowStockBadge = document.getElementById('low-stock-badge');
-    
-    if (lowStockEl) lowStockEl.textContent = lowStock;
-    if (stockAlert) stockAlert.style.display = lowStock > 0 ? 'flex' : 'none';
-    if (lowStockBadge) {
-        lowStockBadge.textContent = lowStock;
-        lowStockBadge.style.display = lowStock > 0 ? 'flex' : 'none';
-    }
+    const token = AdminAuth.getToken();
+
+    // Load semua stats dari MongoDB secara paralel
+    Promise.all([
+        fetch('/api/orders', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ orders: [] })),
+        fetch('/api/visitors', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ stats: { total: 0 } }))
+    ]).then(([orderData, visitorData]) => {
+        const orders = orderData.orders || [];
+        const revenue = orders.reduce((t, o) => t + (o.total || 0), 0);
+        const lowStock = products.filter(p => p.category !== 'other' && p.stock <= 5).length;
+        const totalVisitors = visitorData.stats?.total || 0;
+
+        document.getElementById('total-revenue').textContent = Utils.formatRupiah(revenue);
+        document.getElementById('total-orders').textContent = orders.length;
+        document.getElementById('total-visitors').textContent = totalVisitors.toLocaleString('id-ID');
+        document.getElementById('total-products').textContent = products.length;
+
+        const lowStockEl = document.getElementById('low-stock-count');
+        const stockAlert = document.getElementById('stock-alert');
+        const lowStockBadge = document.getElementById('low-stock-badge');
+        if (lowStockEl) lowStockEl.textContent = lowStock;
+        if (stockAlert) stockAlert.style.display = lowStock > 0 ? 'flex' : 'none';
+        if (lowStockBadge) { lowStockBadge.textContent = lowStock; lowStockBadge.style.display = lowStock > 0 ? 'flex' : 'none'; }
+    }).catch(() => {
+        document.getElementById('total-revenue').textContent = Utils.formatRupiah(0);
+        document.getElementById('total-orders').textContent = '0';
+        document.getElementById('total-visitors').textContent = '0';
+        document.getElementById('total-products').textContent = products.length;
+    });
 }
 
 function initCharts() {
@@ -1127,21 +1135,22 @@ function loadSettings() {
     document.getElementById('ip-restriction').checked = localStorage.getItem('ip_restriction') !== 'false';
 }
 
-function saveQRISSettings() {
+async function saveQRISSettings() {
     const apikey   = document.getElementById('qris-apikey').value.trim();
     const code     = document.getElementById('qris-code').value.trim();
     const merchant = document.getElementById('qris-merchant').value.trim();
     const keyorkut = document.getElementById('qris-keyorkut').value.trim();
     const interval = parseInt(document.getElementById('qris-check-interval').value) || 5000;
 
+    // Simpan ke localStorage (untuk akses cepat di frontend)
     if (apikey)   localStorage.setItem('qris_apikey',   apikey);
     if (code)     localStorage.setItem('qris_code',     code);
     if (merchant) localStorage.setItem('qris_merchant', merchant);
     if (keyorkut) localStorage.setItem('qris_keyorkut', keyorkut);
     localStorage.setItem('qris_check_interval', Math.max(3000, interval).toString());
 
-    // Sync ke MongoDB
-    syncSettingsToDB({
+    // Sync ke MongoDB (agar tersimpan permanen dan bisa diakses dari device lain)
+    await syncSettingsToDB({
         ...(apikey   ? { qris_apikey:   apikey }   : {}),
         ...(code     ? { qris_code:     code }     : {}),
         ...(merchant ? { qris_merchant: merchant } : {}),
@@ -1149,8 +1158,8 @@ function saveQRISSettings() {
         qris_check_interval: Math.max(3000, interval).toString()
     });
 
-    addActivityLog('Pengaturan', 'Simpan konfigurasi QRIS');
-    Swal.fire({ icon: 'success', title: 'Berhasil!', text: 'Pengaturan QRIS disimpan.', background: '#1a1a2e', color: '#fff', timer: 1500, showConfirmButton: false });
+    addActivityLog('Pengaturan', 'Simpan konfigurasi QRIS ke database');
+    Swal.fire({ icon: 'success', title: 'Tersimpan ke Database!', text: 'Pengaturan QRIS tersimpan ke MongoDB. Bisa diakses dari device manapun.', background: '#1a1a2e', color: '#fff', timer: 2000, showConfirmButton: false });
 }
 
 // Backward compat
@@ -1177,10 +1186,28 @@ async function loadSettingsFromDB() {
         const res = await fetch('/api/settings', { headers: { 'X-Admin-Token': token } });
         if (!res.ok) return;
         const { settings } = await res.json();
-        // Sync ke localStorage agar scripts.js bisa baca
-        const syncKeys = ['qris_code', 'qris_merchant', 'qris_check_interval', 'openai_model', 'ptero_url'];
-        syncKeys.forEach(k => { if (settings[k]) localStorage.setItem(k, settings[k]); });
-        // Sensitive keys: hanya update placeholder, tidak simpan ke localStorage
+
+        // Sync semua settings dari DB ke localStorage
+        // Keys non-sensitif: langsung sync
+        const nonSensitive = ['qris_code', 'qris_merchant', 'qris_check_interval', 'openai_model', 'ptero_url', 'session_timeout', 'max_attempts', 'ip_restriction'];
+        nonSensitive.forEach(k => {
+            if (settings[k] && settings[k] !== '••••••••') {
+                localStorage.setItem(k, settings[k]);
+            }
+        });
+
+        // Keys sensitif: tandai sebagai "sudah diatur" tapi tidak simpan nilai ke localStorage
+        const sensitive = ['qris_apikey', 'qris_keyorkut', 'groq_apikey', 'ptero_ptla', 'ptero_ptlc'];
+        sensitive.forEach(k => {
+            if (settings[k] === '••••••••') {
+                // Sudah diatur di DB — tandai tapi tidak expose nilai
+                localStorage.setItem(k + '_set', '1');
+            }
+        });
+
+        // Reload form settings dengan data terbaru
+        loadSettings();
+
     } catch { /* non-critical */ }
 }
 
