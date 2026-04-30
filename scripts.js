@@ -334,16 +334,52 @@ const Utils = {
 };
 
 // ========================================
-// PRODUCT MANAGER
+// PRODUCT MANAGER — pakai MongoDB via API, fallback ke defaultProducts
 // ========================================
 const ProductManager = {
+    _cache: null,
+    _cacheTime: 0,
+    _CACHE_TTL: 5 * 60 * 1000, // 5 menit
+
+    async loadFromDB() {
+        try {
+            const res = await fetch('/api/products');
+            if (!res.ok) throw new Error('API error');
+            const data = await res.json();
+            const products = data.products || [];
+            if (products.length > 0) {
+                this._cache = products;
+                this._cacheTime = Date.now();
+                // Sync ke localStorage sebagai backup offline
+                localStorage.setItem('products', JSON.stringify(products));
+                return products;
+            }
+        } catch (e) {
+            console.warn('Gagal load produk dari DB, pakai cache lokal:', e.message);
+        }
+        // Fallback ke localStorage atau default
+        return JSON.parse(localStorage.getItem('products')) || defaultProducts;
+    },
+
     init() {
+        // Load dari DB saat init, update cache
+        this.loadFromDB().then(products => {
+            this._cache = products;
+            // Re-render jika sudah ada di halaman
+            if (typeof renderProducts === 'function') renderProducts(currentCategory || 'all');
+            if (typeof renderBestsellerStrip === 'function') renderBestsellerStrip();
+        });
+        // Fallback: pastikan localStorage ada
         if (!localStorage.getItem('products')) {
             localStorage.setItem('products', JSON.stringify(defaultProducts));
         }
     },
 
     getAll() {
+        // Pakai cache jika masih fresh
+        if (this._cache && (Date.now() - this._cacheTime) < this._CACHE_TTL) {
+            return this._cache;
+        }
         return JSON.parse(localStorage.getItem('products')) || defaultProducts;
     },
 
@@ -356,56 +392,111 @@ const ProductManager = {
         return this.getAll().filter(p => p.category === category);
     },
 
-    addProduct(productData) {
+    async addProduct(productData) {
+        const token = typeof AdminAuth !== 'undefined' ? AdminAuth.getToken() : '';
+        try {
+            const res = await fetch('/api/products', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                body: JSON.stringify(productData)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                this._cache = null; // invalidate cache
+                await this.loadFromDB();
+                return data.product;
+            }
+        } catch (e) { console.error('addProduct error:', e); }
+        // Fallback lokal
         const products = this.getAll();
-        const newProduct = {
-            ...productData,
-            id: 'prod_' + Date.now().toString(36)
-        };
+        const newProduct = { ...productData, id: 'prod_' + Date.now().toString(36) };
         products.push(newProduct);
         localStorage.setItem('products', JSON.stringify(products));
+        this._cache = products;
         return newProduct;
     },
 
-    updateProduct(id, productData) {
+    async updateProduct(id, productData) {
+        const token = typeof AdminAuth !== 'undefined' ? AdminAuth.getToken() : '';
+        try {
+            const res = await fetch(`/api/products?id=${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                body: JSON.stringify(productData)
+            });
+            if (res.ok) {
+                this._cache = null;
+                await this.loadFromDB();
+                return true;
+            }
+        } catch (e) { console.error('updateProduct error:', e); }
+        // Fallback lokal
         const products = this.getAll();
         const index = products.findIndex(p => p.id === id);
         if (index !== -1) {
             products[index] = { ...products[index], ...productData };
             localStorage.setItem('products', JSON.stringify(products));
+            this._cache = products;
             return true;
         }
         return false;
     },
 
-    deleteProduct(id) {
+    async deleteProduct(id) {
+        const token = typeof AdminAuth !== 'undefined' ? AdminAuth.getToken() : '';
+        try {
+            await fetch(`/api/products?id=${id}`, {
+                method: 'DELETE',
+                headers: { 'X-Admin-Token': token }
+            });
+            this._cache = null;
+            await this.loadFromDB();
+        } catch (e) { console.error('deleteProduct error:', e); }
+        // Fallback lokal
         const products = this.getAll().filter(p => p.id !== id);
         localStorage.setItem('products', JSON.stringify(products));
+        this._cache = products;
     },
 
-    updateStock(productId, quantity) {
+    async updateStock(productId, quantity) {
         const products = this.getAll();
         const index = products.findIndex(p => p.id === productId);
-        
         if (index !== -1 && products[index].category !== 'other') {
             products[index].stock = Math.max(0, products[index].stock - quantity);
-            // Otomatis tandai habis jika stok 0
-            if (products[index].stock <= 0) {
-                products[index].outOfStock = true;
-            }
+            if (products[index].stock <= 0) products[index].outOfStock = true;
             localStorage.setItem('products', JSON.stringify(products));
+            this._cache = products;
+            // Sync ke DB di background
+            const token = typeof AdminAuth !== 'undefined' ? AdminAuth.getToken() : '';
+            fetch(`/api/products?id=${productId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                body: JSON.stringify({ stock: products[index].stock, outOfStock: products[index].outOfStock })
+            }).catch(() => {});
             return true;
         }
         return false;
     },
 
-    restock(productId, quantity) {
+    async restock(productId, quantity) {
+        const token = typeof AdminAuth !== 'undefined' ? AdminAuth.getToken() : '';
+        try {
+            await fetch('/api/products?action=restock', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                body: JSON.stringify({ productId, amount: quantity })
+            });
+            this._cache = null;
+            await this.loadFromDB();
+        } catch (e) { console.error('restock error:', e); }
+        // Fallback lokal
         const products = this.getAll();
         const index = products.findIndex(p => p.id === productId);
-        
         if (index !== -1) {
             products[index].stock = (products[index].stock || 0) + quantity;
+            products[index].outOfStock = false;
             localStorage.setItem('products', JSON.stringify(products));
+            this._cache = products;
             return true;
         }
         return false;

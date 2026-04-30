@@ -346,17 +346,36 @@ function initDashboard() {
     renderCustomers();
     loadSettings();
     setupEventListeners();
-    // Cek stok saat pertama kali masuk dashboard
     checkAndUpdateStock();
-    // Cek stok otomatis setiap 30 detik
     setInterval(checkAndUpdateStock, 30000);
     addActivityLog('Login', 'Admin berhasil login');
-    // Load settings dari DB (async, non-blocking)
     loadSettingsFromDB();
-    // Update badge newsletter
     updateNewsletterBadge();
-    // Update badge reviews
     updateReviewsBadge();
+    // Inisialisasi produk ke MongoDB jika belum ada
+    initProductsDB();
+}
+
+async function initProductsDB() {
+    const token = AdminAuth.getToken();
+    if (!token || token.startsWith('local_')) return;
+    try {
+        // Cek apakah produk sudah ada di DB
+        const res = await fetch('/api/products');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.source === 'default' || data.products?.length === 0) {
+            // Belum ada produk di DB, init dari default
+            await fetch('/api/products?action=init', {
+                method: 'POST',
+                headers: { 'X-Admin-Token': token }
+            });
+            // Reload cache
+            ProductManager._cache = null;
+            await ProductManager.loadFromDB();
+            renderProductsTable();
+        }
+    } catch { /* silent */ }
 }
 
 function setupEventListeners() {
@@ -720,7 +739,7 @@ function toggleStockField() {
     document.getElementById('stock-field').style.display = category === 'other' ? 'none' : 'block';
 }
 
-function saveProduct() {
+async function saveProduct() {
     const id = document.getElementById('product-id').value;
     const name = document.getElementById('product-name').value.trim();
     const category = document.getElementById('product-category').value;
@@ -729,22 +748,24 @@ function saveProduct() {
     const desc = document.getElementById('product-desc').value.trim();
     const features = document.getElementById('product-features').value.split('\n').filter(f => f.trim());
     const recommend = document.getElementById('product-recommend').checked;
-    
+
     if (!name || !price) {
         Swal.fire({ icon: 'error', title: 'Error', text: 'Nama dan harga harus diisi!', background: '#1a1a2e', color: '#fff' });
         return;
     }
-    
+
     const productData = { name, category, price, stock, desc, features, recommend };
-    
+
     if (id) {
-        ProductManager.updateProduct(id, productData);
+        await ProductManager.updateProduct(id, productData);
+        addActivityLog('Produk', `Update produk: ${name}`);
         Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Produk diperbarui!', background: '#1a1a2e', color: '#fff', timer: 1500, showConfirmButton: false });
     } else {
-        ProductManager.addProduct(productData);
+        await ProductManager.addProduct(productData);
+        addActivityLog('Produk', `Tambah produk baru: ${name}`);
         Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Produk ditambahkan!', background: '#1a1a2e', color: '#fff', timer: 1500, showConfirmButton: false });
     }
-    
+
     closeProductModal();
     renderProductsTable();
     updateStats();
@@ -765,11 +786,12 @@ function deleteProduct(productId) {
         background: '#1a1a2e',
         color: '#fff',
         confirmButtonColor: '#ef4444'
-    }).then((result) => {
+    }).then(async (result) => {
         if (result.isConfirmed) {
-            ProductManager.deleteProduct(productId);
+            await ProductManager.deleteProduct(productId);
             renderProductsTable();
             updateStats();
+            addActivityLog('Produk', `Hapus produk ${productId}`);
             Swal.fire({ icon: 'success', title: 'Terhapus', text: 'Produk berhasil dihapus!', background: '#1a1a2e', color: '#fff', timer: 1500, showConfirmButton: false });
         }
     });
@@ -778,7 +800,7 @@ function deleteProduct(productId) {
 function resetProducts() {
     Swal.fire({
         title: 'Reset Produk?',
-        text: 'Semua produk akan direset ke default!',
+        text: 'Semua produk akan direset ke default (dari MongoDB)!',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonText: 'Ya, Reset',
@@ -786,12 +808,23 @@ function resetProducts() {
         background: '#1a1a2e',
         color: '#fff',
         confirmButtonColor: '#ef4444'
-    }).then((result) => {
+    }).then(async (result) => {
         if (result.isConfirmed) {
+            // Hapus semua produk dari DB lalu init ulang
+            const token = AdminAuth.getToken();
+            try {
+                // Init ulang dari default
+                await fetch('/api/products?action=init', {
+                    method: 'POST',
+                    headers: { 'X-Admin-Token': token }
+                });
+            } catch {}
             localStorage.removeItem('products');
-            ProductManager.init();
+            ProductManager._cache = null;
+            await ProductManager.loadFromDB();
             renderProductsTable();
             updateStats();
+            addActivityLog('Produk', 'Reset semua produk ke default');
             Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Produk direset!', background: '#1a1a2e', color: '#fff', timer: 1500, showConfirmButton: false });
         }
     });
@@ -816,18 +849,19 @@ function closeRestockModal() {
     document.getElementById('restock-modal').classList.remove('active');
 }
 
-function confirmRestock() {
+async function confirmRestock() {
     const productId = document.getElementById('restock-product-id').value;
     const amount = parseInt(document.getElementById('restock-amount').value);
-    
+
     if (!amount || amount <= 0) {
         Swal.fire({ icon: 'error', title: 'Error', text: 'Jumlah tidak valid!', background: '#1a1a2e', color: '#fff' });
         return;
     }
-    
-    ProductManager.restock(productId, amount);
+
+    await ProductManager.restock(productId, amount);
+    addActivityLog('Stok', `Restock ${productId} +${amount}`);
     Swal.fire({ icon: 'success', title: 'Berhasil', text: `Stok ditambahkan!`, background: '#1a1a2e', color: '#fff', timer: 1500, showConfirmButton: false });
-    
+
     closeRestockModal();
     renderProductsTable();
     updateStats();
