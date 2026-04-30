@@ -855,99 +855,95 @@ async function confirmRestock() {
 // ========================================
 // ORDERS
 // ========================================
-function renderOrdersTable(filter = 'all') {
+async function renderOrdersTable(filter = 'all') {
     const tbody = document.getElementById('orders-table-body');
     if (!tbody) return;
-    
-    let orders = JSON.parse(localStorage.getItem('salesHistory')) || [];
-    if (filter !== 'all') orders = orders.filter(o => o.status === filter);
 
-    if (orders.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-inbox" style="font-size:2rem;margin-bottom:10px;display:block;"></i>Belum ada pesanan</td></tr>`;
-        return;
-    }
-    
-    tbody.innerHTML = orders.map((order, index) => {
-        const statusLabel = order.status === 'completed' ? 'Selesai' : order.status === 'pending' ? 'Pending' : 'Dibatalkan';
-        return `
-        <tr>
-            <td><code class="order-id">${order.orderId || 'ORD-' + index}</code></td>
-            <td>-</td>
-            <td>${(order.name || order.service || '-').replace(/[<>]/g, '')}</td>
-            <td>${order.quantity}</td>
-            <td>${Utils.formatRupiah(order.price * order.quantity)}</td>
-            <td>
-                <select class="status-select" onchange="updateOrderStatus(${index}, this.value)" style="background:var(--bg-select,#1a1a2e);border:1px solid var(--border-color);border-radius:8px;padding:5px 10px;color:var(--text-primary);font-size:0.85rem;font-family:inherit;color-scheme:dark;cursor:pointer;outline:none;">
-                    <option value="pending" ${order.status === 'pending' ? 'selected' : ''}>Pending</option>
-                    <option value="completed" ${order.status === 'completed' ? 'selected' : ''}>Selesai</option>
-                    <option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>Dibatalkan</option>
-                </select>
-            </td>
-            <td>${new Date(order.date).toLocaleDateString('id-ID')}</td>
-            <td><button class="action-btn delete" onclick="deleteOrder(${index})" title="Hapus"><i class="fas fa-trash"></i></button></td>
-        </tr>`;
-    }).join('');
-}
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:30px;"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>`;
 
-function updateOrderStatus(index, newStatus) {
-    const orders = JSON.parse(localStorage.getItem('salesHistory')) || [];
-    if (orders[index]) {
-        orders[index].status = newStatus;
-        localStorage.setItem('salesHistory', JSON.stringify(orders));
-        updateStats();
-        Utils.showToast ? Utils.showToast('Status pesanan diperbarui!') : null;
+    const token = AdminAuth.getToken();
+    try {
+        const url = filter === 'all' ? '/api/orders' : `/api/orders?status=${filter}`;
+        const res = await fetch(url, { headers: { 'X-Admin-Token': token } });
+        if (!res.ok) throw new Error('API error ' + res.status);
+        const { orders } = await res.json();
+
+        if (!orders || orders.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-inbox" style="font-size:2rem;margin-bottom:10px;display:block;"></i>Belum ada pesanan</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = orders.map((order) => {
+            const itemNames = order.items?.slice(0,2).map(i => i.name).join(', ') || (order.name || order.service || '-');
+            const oid = order.orderId || order._id;
+            return `
+            <tr>
+                <td><code class="order-id" style="cursor:pointer;" onclick="copyOrderId('${oid}')">${oid}</code></td>
+                <td>${order.userName || '-'}</td>
+                <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${itemNames}</td>
+                <td>${order.items?.length || 1}</td>
+                <td>${Utils.formatRupiah(order.total || 0)}</td>
+                <td>
+                    <select class="status-select" onchange="updateOrderStatus('${order._id}', this.value)">
+                        <option value="pending" ${order.status === 'pending' ? 'selected' : ''}>Pending</option>
+                        <option value="completed" ${order.status === 'completed' ? 'selected' : ''}>Selesai</option>
+                        <option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>Dibatalkan</option>
+                    </select>
+                </td>
+                <td>${new Date(order.createdAt || order.date).toLocaleDateString('id-ID')}</td>
+                <td><button class="action-btn delete" onclick="deleteOrder('${order._id}')" title="Hapus"><i class="fas fa-trash"></i></button></td>
+            </tr>`;
+        }).join('');
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)">Gagal memuat: ${err.message}</td></tr>`;
     }
 }
 
 function filterOrders() {
-    const filter = document.getElementById('order-filter').value;
+    const filter = document.getElementById('order-filter')?.value || 'all';
     renderOrdersTable(filter);
 }
 
-function deleteOrder(index) {
-    Swal.fire({
-        title: 'Hapus Pesanan?',
-        text: 'Pesanan akan dihapus!',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Ya, Hapus',
-        cancelButtonText: 'Batal',
-        background: '#1a1a2e',
-        color: '#fff',
-        confirmButtonColor: '#ef4444'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            const orders = JSON.parse(localStorage.getItem('salesHistory')) || [];
-            orders.splice(index, 1);
-            localStorage.setItem('salesHistory', JSON.stringify(orders));
-            renderOrdersTable();
-            renderRecentOrders();
-            updateStats();
-            Swal.fire({ icon: 'success', title: 'Terhapus', text: 'Pesanan berhasil dihapus!', background: '#1a1a2e', color: '#fff', timer: 1500, showConfirmButton: false });
-        }
-    });
+async function updateOrderStatus(orderId, newStatus) {
+    const token = AdminAuth.getToken();
+    try {
+        await fetch(`/api/orders?id=${orderId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+            body: JSON.stringify({ status: newStatus })
+        });
+        addActivityLog('Pesanan', `Update status order ${orderId} → ${newStatus}`);
+        updateStats();
+    } catch (e) { console.error('updateOrderStatus error:', e); }
 }
 
-function clearAllOrders() {
-    Swal.fire({
-        title: 'Hapus Semua Pesanan?',
-        text: 'Semua riwayat pesanan akan dihapus!',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Ya, Hapus Semua',
-        cancelButtonText: 'Batal',
-        background: '#1a1a2e',
-        color: '#fff',
-        confirmButtonColor: '#ef4444'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            localStorage.removeItem('salesHistory');
-            renderOrdersTable();
-            renderRecentOrders();
-            updateStats();
-            Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Semua pesanan dihapus!', background: '#1a1a2e', color: '#fff', timer: 1500, showConfirmButton: false });
-        }
-    });
+async function deleteOrder(orderId) {
+    const confirmed = await Swal.fire({ title: 'Hapus Pesanan?', text: 'Pesanan akan dihapus!', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus', cancelButtonText: 'Batal', background: '#1a1a2e', color: '#fff', confirmButtonColor: '#ef4444' });
+    if (!confirmed.isConfirmed) return;
+    const token = AdminAuth.getToken();
+    try {
+        await fetch(`/api/orders?id=${orderId}`, { method: 'DELETE', headers: { 'X-Admin-Token': token } });
+        addActivityLog('Pesanan', `Hapus order ${orderId}`);
+        renderOrdersTable();
+        updateStats();
+        Swal.fire({ icon: 'success', title: 'Terhapus', text: 'Pesanan berhasil dihapus!', background: '#1a1a2e', color: '#fff', timer: 1500, showConfirmButton: false });
+    } catch (e) { Swal.fire({ icon: 'error', title: 'Gagal', text: e.message, background: '#1a1a2e', color: '#fff' }); }
+}
+
+async function clearAllOrders() {
+    const confirmed = await Swal.fire({ title: 'Hapus Semua Pesanan?', text: 'Semua riwayat pesanan akan dihapus!', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus Semua', cancelButtonText: 'Batal', background: '#1a1a2e', color: '#fff', confirmButtonColor: '#ef4444' });
+    if (!confirmed.isConfirmed) return;
+    const token = AdminAuth.getToken();
+    try {
+        // Hapus semua order satu per satu (tidak ada bulk delete endpoint)
+        const res = await fetch('/api/orders', { headers: { 'X-Admin-Token': token } });
+        const { orders } = await res.json();
+        await Promise.all((orders || []).map(o => fetch(`/api/orders?id=${o._id}`, { method: 'DELETE', headers: { 'X-Admin-Token': token } })));
+        addActivityLog('Pesanan', 'Hapus semua pesanan');
+        renderOrdersTable();
+        updateStats();
+        Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Semua pesanan dihapus!', background: '#1a1a2e', color: '#fff', timer: 1500, showConfirmButton: false });
+    } catch (e) { Swal.fire({ icon: 'error', title: 'Gagal', text: e.message, background: '#1a1a2e', color: '#fff' }); }
 }
 
 // ========================================
@@ -962,7 +958,7 @@ async function renderTestimonials() {
     const token = AdminAuth.getToken();
     let testimonials = [];
     try {
-        const res = await fetch('/api/content?type=testimonials?limit=100', { headers: { 'X-Admin-Token': token } });
+        const res = await fetch('/api/content?type=testimonials&limit=100', { headers: { 'X-Admin-Token': token } });
         if (res.ok) {
             const data = await res.json();
             testimonials = data.testimonials || [];
@@ -1049,7 +1045,7 @@ async function renderCustomers() {
     try {
         const [orderRes, testimonialRes] = await Promise.all([
             fetch('/api/orders', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ orders: [] })),
-            fetch('/api/content?type=testimonials?limit=200', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ testimonials: [] }))
+            fetch('/api/content?type=testimonials&limit=200', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ testimonials: [] }))
         ]);
 
         const orders = orderRes.orders || [];
@@ -1102,7 +1098,23 @@ async function renderCustomers() {
 // ========================================
 // SETTINGS
 // ========================================
-function loadSettings() {
+async function loadSettings() {
+    const token = AdminAuth.getToken();
+
+    // Load dari MongoDB dulu
+    let dbSettings = {};
+    try {
+        const res = await fetch('/api/settings', { headers: { 'X-Admin-Token': token } });
+        if (res.ok) {
+            const data = await res.json();
+            dbSettings = data.settings || {};
+            // Sync ke localStorage sebagai cache
+            Object.entries(dbSettings).forEach(([k, v]) => {
+                if (v && v !== '••••••••') localStorage.setItem(k, v);
+            });
+        }
+    } catch {}
+
     // QRIS Settings
     const qrisApikey   = document.getElementById('qris-apikey');
     const qrisCode     = document.getElementById('qris-code');
@@ -1110,37 +1122,42 @@ function loadSettings() {
     const qrisKeyorkut = document.getElementById('qris-keyorkut');
     const qrisInterval = document.getElementById('qris-check-interval');
 
-    if (qrisApikey)   { qrisApikey.value = ''; qrisApikey.placeholder = localStorage.getItem('qris_apikey') ? '••••••••••••••••' : 'Belum diatur'; }
-    if (qrisCode)     qrisCode.value     = localStorage.getItem('qris_code')     || '';
-    if (qrisMerchant) qrisMerchant.value = localStorage.getItem('qris_merchant') || '';
-    if (qrisKeyorkut) { qrisKeyorkut.value = ''; qrisKeyorkut.placeholder = localStorage.getItem('qris_keyorkut') ? '••••••••••••••••' : 'Belum diatur'; }
-    if (qrisInterval) qrisInterval.value = localStorage.getItem('qris_check_interval') || '5000';
+    if (qrisApikey)   { qrisApikey.value = ''; qrisApikey.placeholder = (dbSettings.qris_apikey === '••••••••' || localStorage.getItem('qris_apikey_set')) ? '••••••••••••••••' : 'Belum diatur'; }
+    if (qrisCode)     qrisCode.value     = dbSettings.qris_code     || localStorage.getItem('qris_code')     || '';
+    if (qrisMerchant) qrisMerchant.value = dbSettings.qris_merchant || localStorage.getItem('qris_merchant') || '';
+    if (qrisKeyorkut) { qrisKeyorkut.value = ''; qrisKeyorkut.placeholder = (dbSettings.qris_keyorkut === '••••••••' || localStorage.getItem('qris_keyorkut_set')) ? '••••••••••••••••' : 'Belum diatur'; }
+    if (qrisInterval) qrisInterval.value = dbSettings.qris_check_interval || localStorage.getItem('qris_check_interval') || '15000';
 
-    // OpenAI/Groq Settings
+    // Groq Settings
     const groqApikey = document.getElementById('groq-apikey');
     if (groqApikey) {
         groqApikey.value = '';
-        groqApikey.placeholder = localStorage.getItem('groq_apikey_set') === '1' ? '••••••••••••••••' : 'Belum diatur (opsional)';
+        const groqSet = dbSettings.groq_apikey === '••••••••' || localStorage.getItem('groq_apikey_set') === '1';
+        groqApikey.placeholder = groqSet ? '••••••••••••••••' : 'Belum diatur (opsional)';
     }
     const groqStatus = document.getElementById('groq-status');
     if (groqStatus) {
-        const isSet = localStorage.getItem('groq_apikey_set') === '1';
+        const isSet = dbSettings.groq_apikey === '••••••••' || localStorage.getItem('groq_apikey_set') === '1';
         groqStatus.innerHTML = isSet
             ? `<span style="color:var(--accent);font-size:0.85rem;"><i class="fas fa-check-circle"></i> Groq API Key sudah diatur — AI aktif</span>`
             : `<span style="color:var(--text-muted);font-size:0.85rem;"><i class="fas fa-info-circle"></i> Belum diatur — chatbot pakai mode fallback (keyword)</span>`;
     }
 
     // Pterodactyl Settings
-    document.getElementById('ptero-url').value = localStorage.getItem('ptero_url') || '';
-    document.getElementById('ptero-ptla').value = '';
-    document.getElementById('ptero-ptla').placeholder = localStorage.getItem('ptero_ptla_set') === '1' ? '••••••••••••••••' : 'Belum diatur';
-    document.getElementById('ptero-ptlc').value = '';
-    document.getElementById('ptero-ptlc').placeholder = localStorage.getItem('ptero_ptlc_set') === '1' ? '••••••••••••••••' : 'Belum diatur';
+    const pteroUrl = document.getElementById('ptero-url');
+    if (pteroUrl) pteroUrl.value = dbSettings.ptero_url || localStorage.getItem('ptero_url') || '';
+    const ptroPtla = document.getElementById('ptero-ptla');
+    if (ptroPtla) { ptroPtla.value = ''; ptroPtla.placeholder = (dbSettings.ptero_ptla === '••••••••' || localStorage.getItem('ptero_ptla_set') === '1') ? '••••••••••••••••' : 'Belum diatur'; }
+    const ptroPtlc = document.getElementById('ptero-ptlc');
+    if (ptroPtlc) { ptroPtlc.value = ''; ptroPtlc.placeholder = (dbSettings.ptero_ptlc === '••••••••' || localStorage.getItem('ptero_ptlc_set') === '1') ? '••••••••••••••••' : 'Belum diatur'; }
 
     // Security Settings
-    document.getElementById('session-timeout').value = localStorage.getItem('session_timeout') || '3600';
-    document.getElementById('max-attempts').value    = localStorage.getItem('max_attempts')    || '5';
-    document.getElementById('ip-restriction').checked = localStorage.getItem('ip_restriction') !== 'false';
+    const sessionTimeout = document.getElementById('session-timeout');
+    const maxAttempts = document.getElementById('max-attempts');
+    const ipRestriction = document.getElementById('ip-restriction');
+    if (sessionTimeout) sessionTimeout.value = dbSettings.session_timeout || localStorage.getItem('session_timeout') || '3600';
+    if (maxAttempts) maxAttempts.value = dbSettings.max_attempts || localStorage.getItem('max_attempts') || '5';
+    if (ipRestriction) ipRestriction.checked = (dbSettings.ip_restriction || localStorage.getItem('ip_restriction')) !== 'false';
 }
 
 async function saveQRISSettings() {
@@ -1282,21 +1299,22 @@ async function testGroqConnection() {
     }
 }
 
-function savePteroSettings() {
+async function savePteroSettings() {
     const url = document.getElementById('ptero-url').value.trim();
     const ptla = document.getElementById('ptero-ptla').value.trim();
     const ptlc = document.getElementById('ptero-ptlc').value.trim();
-    
-    if (url) localStorage.setItem('ptero_url', url);
-    if (ptla) {
-        localStorage.setItem('ptero_ptla', ptla);
-        localStorage.setItem('ptero_ptla_set', '1');
+
+    const updates = {};
+    if (url)  { updates.ptero_url = url;  localStorage.setItem('ptero_url', url); }
+    if (ptla) { updates.ptero_ptla = ptla; localStorage.setItem('ptero_ptla_set', '1'); }
+    if (ptlc) { updates.ptero_ptlc = ptlc; localStorage.setItem('ptero_ptlc_set', '1'); }
+
+    if (Object.keys(updates).length > 0) {
+        await syncSettingsToDB(updates);
     }
-    if (ptlc) {
-        localStorage.setItem('ptero_ptlc', ptlc);
-        localStorage.setItem('ptero_ptlc_set', '1');
-    }
-    Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Pengaturan Pterodactyl disimpan!', background: '#1a1a2e', color: '#fff', timer: 1500, showConfirmButton: false });
+
+    addActivityLog('Pengaturan', 'Simpan pengaturan Pterodactyl ke database');
+    Swal.fire({ icon: 'success', title: 'Tersimpan!', text: 'Pengaturan Pterodactyl disimpan ke database.', background: '#1a1a2e', color: '#fff', timer: 1500, showConfirmButton: false });
 }
 
 async function testPteroConnection() {
@@ -1330,11 +1348,21 @@ async function testPteroConnection() {
     }
 }
 
-function saveSecuritySettings() {
-    localStorage.setItem('session_timeout', document.getElementById('session-timeout').value);
-    localStorage.setItem('max_attempts', document.getElementById('max-attempts').value);
-    localStorage.setItem('ip_restriction', document.getElementById('ip-restriction').checked);
-    Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Pengaturan keamanan disimpan!', background: '#1a1a2e', color: '#fff', timer: 1500, showConfirmButton: false });
+async function saveSecuritySettings() {
+    const timeout = document.getElementById('session-timeout').value;
+    const maxAttempts = document.getElementById('max-attempts').value;
+    const ipRestriction = document.getElementById('ip-restriction').checked.toString();
+
+    // Simpan ke localStorage
+    localStorage.setItem('session_timeout', timeout);
+    localStorage.setItem('max_attempts', maxAttempts);
+    localStorage.setItem('ip_restriction', ipRestriction);
+
+    // Sync ke MongoDB
+    await syncSettingsToDB({ session_timeout: timeout, max_attempts: maxAttempts, ip_restriction: ipRestriction });
+
+    addActivityLog('Pengaturan', 'Simpan pengaturan keamanan ke database');
+    Swal.fire({ icon: 'success', title: 'Tersimpan!', text: 'Pengaturan keamanan disimpan ke database.', background: '#1a1a2e', color: '#fff', timer: 1500, showConfirmButton: false });
 }
 
 function toggleInputPassword(id) {
@@ -1658,23 +1686,43 @@ function clearCartFromAdmin() {
 // FITUR 5: LOG AKTIVITAS ADMIN
 // ========================================
 function addActivityLog(category, message) {
+    const log = { id: Date.now(), category, message, time: new Date().toISOString() };
+
+    // Simpan ke localStorage (untuk akses cepat)
     const logs = JSON.parse(localStorage.getItem('activity_log') || '[]');
-    logs.unshift({
-        id: Date.now(),
-        category,
-        message,
-        time: new Date().toISOString()
-    });
-    // Keep max 100 logs
+    logs.unshift(log);
     if (logs.length > 100) logs.splice(100);
     localStorage.setItem('activity_log', JSON.stringify(logs));
+
+    // Sync ke MongoDB di background (non-blocking)
+    const token = AdminAuth.getToken();
+    fetch('/api/content?type=activity-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+        body: JSON.stringify(log)
+    }).catch(() => {}); // silent fail
 }
 
-function renderActivityLog(filter = '') {
+async function renderActivityLog(filter = '') {
     const listEl = document.getElementById('activity-log-list');
     if (!listEl) return;
 
-    let logs = JSON.parse(localStorage.getItem('activity_log') || '[]');
+    // Coba load dari MongoDB dulu
+    const token = AdminAuth.getToken();
+    let logs = [];
+    try {
+        const res = await fetch('/api/content?type=activity-log', { headers: { 'X-Admin-Token': token } });
+        if (res.ok) {
+            const data = await res.json();
+            logs = data.logs || [];
+        }
+    } catch {}
+
+    // Fallback ke localStorage
+    if (logs.length === 0) {
+        logs = JSON.parse(localStorage.getItem('activity_log') || '[]');
+    }
+
     if (filter) {
         const q = filter.toLowerCase();
         logs = logs.filter(l => l.message.toLowerCase().includes(q) || l.category.toLowerCase().includes(q));
@@ -1689,7 +1737,8 @@ function renderActivityLog(filter = '') {
         'Login': '#6366f1', 'Logout': '#a1a1aa', 'Produk': '#10b981',
         'Pesanan': '#f59e0b', 'Testimoni': '#ec4899', 'Pengaturan': '#3b82f6',
         'Keamanan': '#ef4444', 'Export': '#8b5cf6', 'Keranjang': '#f59e0b',
-        'Stok': '#10b981'
+        'Stok': '#10b981', 'Broadcast': '#ec4899', 'Newsletter': '#10b981',
+        'Flash Sale': '#f59e0b', 'Ulasan': '#6366f1'
     };
 
     listEl.innerHTML = `<div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius);overflow:hidden;">` +
@@ -1701,7 +1750,7 @@ function renderActivityLog(filter = '') {
             <div style="display:flex;align-items:center;gap:15px;padding:14px 20px;border-bottom:1px solid var(--border-color);">
                 <div style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;"></div>
                 <span style="background:${color}22;color:${color};padding:3px 10px;border-radius:20px;font-size:0.75rem;font-weight:600;min-width:80px;text-align:center;flex-shrink:0;">${log.category}</span>
-                <span style="flex:1;color:var(--text-primary);font-size:0.9rem;">${log.message.replace(/[<>]/g, '')}</span>
+                <span style="flex:1;color:var(--text-primary);font-size:0.9rem;">${(log.message||'').replace(/[<>]/g, '')}</span>
                 <span style="color:var(--text-muted);font-size:0.8rem;flex-shrink:0;">${timeStr}</span>
             </div>`;
         }).join('') + '</div>';
@@ -1730,23 +1779,21 @@ function exportActivityLog() {
     URL.revokeObjectURL(url);
 }
 
-function clearActivityLog() {
-    Swal.fire({
-        title: 'Hapus Semua Log?',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Ya, Hapus',
-        cancelButtonText: 'Batal',
-        background: '#1a1a2e',
-        color: '#fff',
-        confirmButtonColor: '#ef4444'
-    }).then(result => {
-        if (result.isConfirmed) {
-            localStorage.removeItem('activity_log');
-            renderActivityLog();
-            Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Log dihapus!', background: '#1a1a2e', color: '#fff', timer: 1200, showConfirmButton: false });
-        }
-    });
+async function clearActivityLog() {
+    const confirmed = await Swal.fire({ title: 'Hapus Semua Log?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus', cancelButtonText: 'Batal', background: '#1a1a2e', color: '#fff', confirmButtonColor: '#ef4444' });
+    if (!confirmed.isConfirmed) return;
+
+    // Hapus dari localStorage
+    localStorage.removeItem('activity_log');
+
+    // Hapus dari MongoDB
+    const token = AdminAuth.getToken();
+    try {
+        await fetch('/api/content?type=activity-log', { method: 'DELETE', headers: { 'X-Admin-Token': token } });
+    } catch {}
+
+    renderActivityLog();
+    Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Log dihapus dari database!', background: '#1a1a2e', color: '#fff', timer: 1200, showConfirmButton: false });
 }
 
 // Patch showSection to render activity log
