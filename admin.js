@@ -582,38 +582,70 @@ async function renderRecentOrders() {
 // ========================================
 let currentProductFilter = 'all';
 
-function renderProductsTable(filter = '') {
+async function renderProductsTable(filter = '') {
     const tbody = document.getElementById('products-table-body');
     if (!tbody) return;
-    
-    let products = ProductManager.getAll();
-    
+
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:30px;"><i class="fas fa-spinner fa-spin"></i> Memuat produk...</td></tr>`;
+
+    const token = AdminAuth.getToken();
+    let products = [];
+
+    try {
+        // Load dari MongoDB
+        const res = await fetch('/api/products', { headers: { 'X-Admin-Token': token } });
+        if (res.ok) {
+            const data = await res.json();
+            products = data.products || [];
+            // Update cache lokal
+            if (products.length > 0) {
+                localStorage.setItem('products', JSON.stringify(products));
+                if (typeof ProductManager !== 'undefined') {
+                    ProductManager._cache = products;
+                    ProductManager._cacheTime = Date.now();
+                }
+            }
+        }
+    } catch {}
+
+    // Fallback ke cache lokal
+    if (products.length === 0) {
+        products = JSON.parse(localStorage.getItem('products') || '[]');
+    }
+
+    // Filter kategori
     if (currentProductFilter !== 'all') {
         products = products.filter(p => p.category === currentProductFilter);
     }
-    
+
+    // Filter search
     if (filter) {
         const q = filter.toLowerCase();
         products = products.filter(p => p.name.toLowerCase().includes(q));
     }
-    
-    const salesHistory = JSON.parse(localStorage.getItem('salesHistory')) || [];
-    
+
+    if (products.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">
+            <i class="fas fa-box-open" style="font-size:2rem;display:block;margin-bottom:10px;opacity:0.3;"></i>
+            Belum ada produk. <button class="btn btn-primary btn-sm" onclick="initProductsDB()" style="margin-left:10px;">Init Produk Default</button>
+        </td></tr>`;
+        return;
+    }
+
+    const categoryLabels = { vps: 'VPS', panel: 'Panel', other: 'Jasa' };
+
     tbody.innerHTML = products.map(product => {
-        const sold = salesHistory.filter(s => s.id === product.id).reduce((sum, s) => sum + s.quantity, 0);
         const stockClass = product.category === 'other' ? 'unlimited' :
             product.stock > 10 ? 'high' : product.stock > 5 ? 'medium' : 'low';
-        
-        const categoryLabels = { vps: 'VPS', panel: 'Panel', other: 'Jasa' };
-        
+
         return `
             <tr>
                 <td><strong>${product.name}</strong> ${product.recommend ? '<span class="badge badge-warning">★</span>' : ''}</td>
-                <td><span class="category-badge ${product.category}">${categoryLabels[product.category]}</span></td>
+                <td><span class="category-badge ${product.category}">${categoryLabels[product.category] || product.category}</span></td>
                 <td>${Utils.formatRupiah(product.price)}</td>
                 <td><span class="stock-badge ${stockClass}">${product.category === 'other' ? '∞' : product.stock}</span></td>
                 <td><span class="status-badge ${product.category === 'other' || product.stock > 0 ? 'active' : 'inactive'}">${product.category === 'other' || product.stock > 0 ? 'Aktif' : 'Habis'}</span></td>
-                <td>${sold}</td>
+                <td>-</td>
                 <td>
                     <div class="action-btns">
                         ${product.category !== 'other' ? `<button class="action-btn restock" onclick="openRestockModal('${product.id}')" title="Restock"><i class="fas fa-plus"></i></button>` : ''}
@@ -621,11 +653,10 @@ function renderProductsTable(filter = '') {
                         <button class="action-btn delete" onclick="deleteProduct('${product.id}')" title="Hapus"><i class="fas fa-trash"></i></button>
                     </div>
                 </td>
-            </tr>
-        `;
+            </tr>`;
     }).join('');
 }
-
+    
 function filterProducts() {
     const query = document.getElementById('product-search').value;
     renderProductsTable(query);
@@ -636,14 +667,24 @@ function filterProductsByCategory(category) {
     renderProductsTable();
 }
 
-function openProductModal(productId = null) {
+async function openProductModal(productId = null) {
     const modal = document.getElementById('product-modal');
     const title = document.getElementById('product-modal-title');
-    
+
     if (productId) {
-        const product = ProductManager.getById(productId);
+        // Cari dari cache dulu, kalau tidak ada load dari DB
+        let product = ProductManager.getById(productId);
+        if (!product) {
+            try {
+                const res = await fetch(`/api/products?id=${productId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    product = data.product;
+                }
+            } catch {}
+        }
         if (!product) return;
-        
+
         title.textContent = 'Edit Produk';
         document.getElementById('product-id').value = product.id;
         document.getElementById('product-name').value = product.name;
@@ -664,7 +705,7 @@ function openProductModal(productId = null) {
         document.getElementById('product-features').value = '';
         document.getElementById('product-recommend').checked = false;
     }
-    
+
     toggleStockField();
     modal.classList.add('active');
 }
@@ -772,15 +813,20 @@ function resetProducts() {
 // ========================================
 // RESTOCK
 // ========================================
-function openRestockModal(productId) {
-    const product = ProductManager.getById(productId);
+async function openRestockModal(productId) {
+    let product = ProductManager.getById(productId);
+    if (!product) {
+        try {
+            const res = await fetch(`/api/products?id=${productId}`);
+            if (res.ok) product = (await res.json()).product;
+        } catch {}
+    }
     if (!product) return;
-    
+
     document.getElementById('restock-product-id').value = productId;
     document.getElementById('restock-product-name').textContent = product.name;
     document.getElementById('restock-current-stock').textContent = product.stock;
     document.getElementById('restock-amount').value = '';
-    
     document.getElementById('restock-modal').classList.add('active');
 }
 
