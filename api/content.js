@@ -195,7 +195,70 @@ export default async function handler(req, res) {
             }
         }
 
-        return res.status(400).json({ error: 'Type tidak dikenal' });
+        // ════════════════════════════════════════════════════
+        // TESTIMONIALS (digabung dari testimonials.js)
+        // ════════════════════════════════════════════════════
+        if (type === 'testimonials') {
+            const col = await getCollection('testimonials');
+            const DEFAULT_TESTIMONIALS = [
+                { name: "Zaki_MCPE", rating: 5, message: "Gila vps 4gb nya kenceng bgt bang buat server mcpe. Lancar jaya gak ada lag sama sekali padahal player rame. Thx min!", date: "2026-02-18", status: "approved" },
+                { name: "Fauzan.dev", rating: 5, message: "Awalnya iseng nyoba panel 1gb hemat buat naruh script bot wa doang, eh ternyata stabil bngt. Harga seribu perak dapet segini mah worth it parah.", date: "2026-02-17", status: "approved" },
+                { name: "Rizky Store", rating: 4, message: "Makasih mase, jasa buat web top up ku jadi cakep. cuma revisi warna temanya lumayan nunggu lama balasan adminnya wkwk. tp overal hasil mantap.", date: "2026-02-15", status: "approved" },
+                { name: "Dika Santoso", rating: 5, message: "Sultan beneran ini mah panel unlimitednya. Udah deploy 5 server barengan resource masi aman sentosa, ga kena suspend.", date: "2026-02-14", status: "approved" },
+                { name: "Bima_Aji", rating: 4, message: "Fitur bot wa nya lengkap bgt sesuai rikues, tp jujur awal2 agak bingung cara run nya di panel. untung adminnya sabar njelasin sampe bisa.", date: "2026-02-12", status: "approved" },
+                { name: "Kelvin.jr", rating: 5, message: "Penyelamat bgt asli!! Script bot ku error dari kemarin, pake jasa fix error langsung jalan lagi normal. murah lg wkwk", date: "2026-02-10", status: "approved" },
+                { name: "Sandi VPN", rating: 4, message: "Vps basic 1gb nya mayan bgt buat tunneling pribadi. ping sempet naik turun kmrn siang tp skrg dah stabil lg jos.", date: "2026-02-08", status: "approved" },
+                { name: "Tegar_SAMP", rating: 5, message: "Pake panel 10gb turbo buat server SAMP, ping nya dapet ijo terus bang. Server SG premium nya emang beda.", date: "2026-02-05", status: "approved" },
+                { name: "Agung_Store", rating: 5, message: "Jasa rename script nya rapih bang. Sekarang bot nya udah full pake nama & logo store ku sendiri. Keren euy", date: "2026-02-03", status: "approved" },
+                { name: "Rio.P", rating: 3, message: "Order jasa install panel ptero ke vps sendiri. jujur agak lama prosesnya ampe 3 jam karna katanya lg antri panjang. tp yaudah lah yg penting panel nyala normal.", date: "2026-02-01", status: "approved" }
+            ];
+
+            if (req.method === 'GET') {
+                const query = admin ? {} : { status: 'approved' };
+                const page = parseInt(req.query.page) || 1;
+                const limit = parseInt(req.query.limit) || 50;
+                const [data, total] = await Promise.all([
+                    col.find(query).sort({ createdAt: -1 }).skip((page-1)*limit).limit(limit).toArray(),
+                    col.countDocuments(query)
+                ]);
+                if (data.length === 0 && !admin) {
+                    return res.status(200).json({ testimonials: DEFAULT_TESTIMONIALS, total: DEFAULT_TESTIMONIALS.length, source: 'default' });
+                }
+                return res.status(200).json({ testimonials: data, total });
+            }
+
+            if (req.method === 'POST' && req.query.action === 'init') {
+                if (!admin) return res.status(401).json({ error: 'Admin only' });
+                const count = await col.countDocuments();
+                if (count > 0) return res.status(409).json({ error: 'Testimoni sudah ada', count });
+                await col.insertMany(DEFAULT_TESTIMONIALS.map(t => ({ ...t, createdAt: new Date() })));
+                return res.status(201).json({ success: true, inserted: DEFAULT_TESTIMONIALS.length });
+            }
+
+            if (req.method === 'POST') {
+                const { name, rating, message } = req.body;
+                if (!name || !message || message.length < 10) return res.status(400).json({ error: 'Nama dan pesan (min 10 karakter) diperlukan' });
+                await col.insertOne({ name: sanitize(name, 100), rating: Math.min(Math.max(parseInt(rating)||5,1),5), message: sanitize(message, 500), date: new Date().toISOString().split('T')[0], status: 'pending', createdAt: new Date() });
+                return res.status(201).json({ success: true, message: 'Testimoni dikirim, menunggu persetujuan.' });
+            }
+
+            if (req.method === 'PUT') {
+                if (!admin) return res.status(401).json({ error: 'Admin only' });
+                const { id } = req.query;
+                const { status } = req.body;
+                if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'Status harus approved atau rejected' });
+                await col.updateOne({ _id: new ObjectId(id) }, { $set: { status } });
+                return res.status(200).json({ success: true });
+            }
+
+            if (req.method === 'DELETE') {
+                if (!admin) return res.status(401).json({ error: 'Admin only' });
+                await col.deleteOne({ _id: new ObjectId(req.query.id) });
+                return res.status(200).json({ success: true });
+            }
+        }
+
+        return res.status(400).json({ error: 'Type tidak dikenal. Gunakan: newsletter, flash-sale, reviews, testimonials' });
 
     } catch (err) {
         console.error('[content] Error:', err.message);
