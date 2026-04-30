@@ -2346,10 +2346,12 @@ applyPromo = function() {
 // FITUR WEBSITE 7: MAINTENANCE MODE CHECK
 // ============================================================
 (function checkMaintenance() {
+    // JANGAN tampilkan maintenance di halaman admin
+    if (window.location.pathname.includes('admin')) return;
+
     const maintenance = localStorage.getItem('maintenance_mode') === 'true';
     if (maintenance) {
         const msg = localStorage.getItem('maintenance_message') || 'Website sedang dalam pemeliharaan. Silakan coba lagi nanti.';
-        // Show overlay
         const overlay = document.createElement('div');
         overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#0a0a0f;z-index:999999;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;';
         overlay.innerHTML = `

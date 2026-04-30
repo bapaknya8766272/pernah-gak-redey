@@ -334,7 +334,19 @@ async function changePassword() {
 // ========================================
 // DASHBOARD INITIALIZATION
 // ========================================
-let salesChart, categoryChart;
+let salesChart, categoryChart, trafficChart, deviceChart;
+let sparklineCharts = {};
+
+function initCharts() {
+    initSalesChart();
+    initCategoryChart();
+    initTrafficChart();
+    initDeviceChart();
+    initSparklines();
+    loadRealtimeData();
+    // Update realtime setiap 30 detik
+    setInterval(loadRealtimeData, 30000);
+}
 
 function initDashboard() {
     updateStats();
@@ -489,123 +501,36 @@ function updateStats() {
     });
 }
 
-function initCharts() {
-    const salesCtx = document.getElementById('salesChart');
-    const categoryCtx = document.getElementById('categoryChart');
-    
-    if (salesCtx) {
-        salesChart = new Chart(salesCtx, {
-            type: 'line',
-            data: getSalesData(7),
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                        ticks: {
-                            color: '#a1a1aa',
-                            callback: v => 'Rp ' + v.toLocaleString('id-ID')
-                        }
-                    },
-                    x: {
-                        grid: { display: false },
-                        ticks: { color: '#a1a1aa' }
-                    }
-                }
-            }
-        });
-    }
-    
-    if (categoryCtx) {
-        const catData = getCategoryData();
-        categoryChart = new Chart(categoryCtx, {
-            type: 'doughnut',
-            data: {
-                labels: ['VPS', 'Panel', 'Jasa'],
-                datasets: [{
-                    data: [catData.vps, catData.panel, catData.other],
-                    backgroundColor: ['#6366f1', '#10b981', '#f59e0b'],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { color: '#a1a1aa', padding: 20 }
-                    }
-                },
-                cutout: '70%'
-            }
-        });
-    }
-}
+// initCharts lama digantikan oleh fungsi-fungsi baru di bawah
 
 function getSalesData(days) {
-    const salesHistory = JSON.parse(localStorage.getItem('salesHistory')) || [];
+    // Data dari MongoDB orders (async, dipanggil terpisah)
     const labels = [];
     const values = [];
-    
     for (let i = days - 1; i >= 0; i--) {
         const date = new Date();
         date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-        
         labels.push(date.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' }));
-        
-        const daySales = salesHistory.filter(sale => {
-            const saleDate = new Date(sale.date).toISOString().split('T')[0];
-            return saleDate === dateStr;
-        });
-        
-        values.push(daySales.reduce((sum, s) => sum + (s.price * s.quantity), 0));
+        values.push(0);
     }
-    
     return { labels, datasets: [{ data: values, borderColor: '#6366f1', backgroundColor: 'rgba(99, 102, 241, 0.1)', fill: true, tension: 0.4 }] };
 }
 
 function getCategoryData() {
-    const salesHistory = JSON.parse(localStorage.getItem('salesHistory')) || [];
-    const products = ProductManager.getAll();
-    
-    let vps = 0, panel = 0, other = 0;
-    
-    salesHistory.forEach(sale => {
-        const product = products.find(p => p.id === sale.id);
-        if (product) {
-            if (product.category === 'vps') vps += sale.quantity;
-            else if (product.category === 'panel') panel += sale.quantity;
-            else other += sale.quantity;
-        }
-    });
-    
-    return { vps, panel, other };
+    return { vps: 0, panel: 0, other: 0 };
 }
 
 function updateSalesChart() {
-    const days = parseInt(document.getElementById('sales-period').value);
-    if (salesChart) {
-        salesChart.data = getSalesData(days);
-        salesChart.update();
-    }
+    const days = parseInt(document.getElementById('sales-period')?.value || '7');
+    loadSalesChartData(days);
 }
 
 function refreshDashboard() {
     updateStats();
-    if (salesChart) {
-        salesChart.data = getSalesData(parseInt(document.getElementById('sales-period')?.value || '7'));
-        salesChart.update();
-    }
-    if (categoryChart) {
-        const catData = getCategoryData();
-        categoryChart.data.datasets[0].data = [catData.vps, catData.panel, catData.other];
-        categoryChart.update();
-    }
+    loadSalesChartData(parseInt(document.getElementById('sales-period')?.value || '7'));
+    loadTrafficData(parseInt(document.getElementById('traffic-period')?.value || '7'));
+    loadDeviceData();
+    loadRealtimeData();
     renderRecentOrders();
     Swal.fire({ icon: 'success', title: 'Refreshed!', text: 'Data dashboard diperbarui.', background: '#1a1a2e', color: '#fff', timer: 1000, showConfirmButton: false });
 }
@@ -618,32 +543,38 @@ function copyOrderId(orderId) {
     });
 }
 
-function renderRecentOrders() {
+async function renderRecentOrders() {
     const tbody = document.getElementById('recent-orders-body');
     if (!tbody) return;
-    
-    const orders = JSON.parse(localStorage.getItem('salesHistory')) || [];
-    const recentOrders = orders.slice(-5).reverse();
 
-    if (recentOrders.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;"><i class="fas fa-spinner fa-spin"></i></td></tr>`;
+
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch('/api/orders?limit=5', { headers: { 'X-Admin-Token': token } });
+        if (!res.ok) throw new Error();
+        const { orders } = await res.json();
+
+        if (!orders || orders.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted)">Belum ada pesanan</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = orders.slice(0, 5).map(order => {
+            const itemNames = order.items?.slice(0,2).map(i => i.name).join(', ') || '-';
+            const oid = order.orderId || order._id;
+            return `
+            <tr>
+                <td><code class="order-id" style="cursor:pointer;" onclick="copyOrderId('${oid}')" title="Klik untuk copy">${oid} <i class="fas fa-copy" style="font-size:0.7rem;opacity:0.5;"></i></code></td>
+                <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${itemNames}</td>
+                <td>${Utils.formatRupiah(order.total || 0)}</td>
+                <td><span class="status-badge ${order.status || 'pending'}">${order.status === 'completed' ? 'Selesai' : order.status === 'pending' ? 'Pending' : 'Dibatalkan'}</span></td>
+                <td>${new Date(order.createdAt).toLocaleDateString('id-ID')}</td>
+            </tr>`;
+        }).join('');
+    } catch {
         tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted)">Belum ada pesanan</td></tr>`;
-        return;
     }
-    
-    tbody.innerHTML = recentOrders.map((order, index) => {
-        const safeName = (order.name || order.service || '-').replace(/[<>]/g, '');
-        const oid = order.orderId || 'ORD-' + index;
-        return `
-        <tr>
-            <td>
-                <code class="order-id" style="cursor:pointer;" onclick="copyOrderId('${oid}')" title="Klik untuk copy">${oid} <i class="fas fa-copy" style="font-size:0.7rem;opacity:0.5;"></i></code>
-            </td>
-            <td>${safeName}</td>
-            <td>${Utils.formatRupiah(order.price * order.quantity)}</td>
-            <td><span class="status-badge ${order.status || 'pending'}">${order.status === 'completed' ? 'Selesai' : order.status === 'pending' ? 'Pending' : 'Dibatalkan'}</span></td>
-            <td>${new Date(order.date).toLocaleDateString('id-ID')}</td>
-        </tr>`;
-    }).join('');
 }
 
 // ========================================
@@ -2535,6 +2466,291 @@ window.checkAndUpdateStock = checkAndUpdateStock;
 window.AdminAuth = AdminAuth;
 window.submitAdminSetup = submitAdminSetup;
 window.syncSettingsToDB = syncSettingsToDB;
+window.updateTrafficChart = updateTrafficChart;
+window.loadRealtimeData = loadRealtimeData;
+
+// ============================================================
+// CHART FUNCTIONS — MODERN DASHBOARD
+// ============================================================
+const CHART_DEFAULTS = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#71717a', font: { size: 11 } } },
+        x: { grid: { display: false }, ticks: { color: '#71717a', font: { size: 11 } } }
+    }
+};
+
+function initSalesChart() {
+    const ctx = document.getElementById('salesChart');
+    if (!ctx) return;
+    if (salesChart) salesChart.destroy();
+    salesChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: [], datasets: [{ label: 'Revenue', data: [], backgroundColor: 'rgba(99,102,241,0.7)', borderRadius: 6, borderSkipped: false }] },
+        options: {
+            ...CHART_DEFAULTS,
+            scales: {
+                y: { ...CHART_DEFAULTS.scales.y, ticks: { color: '#71717a', callback: v => 'Rp ' + (v/1000).toFixed(0) + 'k' } },
+                x: CHART_DEFAULTS.scales.x
+            }
+        }
+    });
+    loadSalesChartData(7);
+}
+
+async function loadSalesChartData(days) {
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch('/api/orders', { headers: { 'X-Admin-Token': token } });
+        if (!res.ok) return;
+        const { orders } = await res.json();
+
+        const labels = [], values = [];
+        for (let i = days - 1; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            const dateStr = date.toISOString().split('T')[0];
+            labels.push(date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }));
+            const dayRevenue = orders
+                .filter(o => o.createdAt && new Date(o.createdAt).toISOString().split('T')[0] === dateStr)
+                .reduce((s, o) => s + (o.total || 0), 0);
+            values.push(dayRevenue);
+        }
+
+        if (salesChart) {
+            salesChart.data.labels = labels;
+            salesChart.data.datasets[0].data = values;
+            salesChart.update();
+        }
+    } catch {}
+}
+
+function initCategoryChart() {
+    const ctx = document.getElementById('categoryChart');
+    if (!ctx) return;
+    if (categoryChart) categoryChart.destroy();
+    categoryChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['VPS', 'Panel', 'Jasa'],
+            datasets: [{ data: [1, 1, 1], backgroundColor: ['#6366f1', '#10b981', '#f59e0b'], borderWidth: 0, hoverOffset: 8 }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom', labels: { color: '#a1a1aa', padding: 15, font: { size: 11 } } } },
+            cutout: '65%'
+        }
+    });
+    loadCategoryData();
+}
+
+async function loadCategoryData() {
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch('/api/orders', { headers: { 'X-Admin-Token': token } });
+        if (!res.ok) return;
+        const { orders } = await res.json();
+        const products = ProductManager.getAll();
+        let vps = 0, panel = 0, other = 0;
+        orders.forEach(o => {
+            (o.items || []).forEach(item => {
+                const p = products.find(p => p.id === item.id);
+                if (p?.category === 'vps') vps += item.quantity || 1;
+                else if (p?.category === 'panel') panel += item.quantity || 1;
+                else other += item.quantity || 1;
+            });
+        });
+        if (categoryChart) {
+            categoryChart.data.datasets[0].data = [vps || 1, panel || 1, other || 1];
+            categoryChart.update();
+        }
+    } catch {}
+}
+
+function initTrafficChart() {
+    const ctx = document.getElementById('trafficChart');
+    if (!ctx) return;
+    if (trafficChart) trafficChart.destroy();
+    trafficChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                { label: 'Pengunjung Baru', data: [], borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.08)', fill: true, tension: 0.4, pointRadius: 3 },
+                { label: 'Kembali', data: [], borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', fill: true, tension: 0.4, pointRadius: 3 }
+            ]
+        },
+        options: {
+            ...CHART_DEFAULTS,
+            plugins: { legend: { display: false } }
+        }
+    });
+    loadTrafficData(7);
+}
+
+async function loadTrafficData(days) {
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch('/api/visitors', { headers: { 'X-Admin-Token': token } });
+        if (!res.ok) return;
+        const { dailyStats } = await res.json();
+
+        const labels = [], newV = [], returning = [];
+        for (let i = days - 1; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            const dateStr = date.toISOString().split('T')[0];
+            labels.push(date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }));
+            const day = dailyStats?.find(d => d.date === dateStr);
+            const count = day?.count || 0;
+            newV.push(count);
+            returning.push(Math.floor(count * 0.3)); // estimasi returning
+        }
+
+        if (trafficChart) {
+            trafficChart.data.labels = labels;
+            trafficChart.data.datasets[0].data = newV;
+            trafficChart.data.datasets[1].data = returning;
+            trafficChart.update();
+        }
+    } catch {}
+}
+
+function updateTrafficChart() {
+    const days = parseInt(document.getElementById('traffic-period')?.value || '7');
+    loadTrafficData(days);
+}
+
+function initDeviceChart() {
+    const ctx = document.getElementById('deviceChart');
+    if (!ctx) return;
+    if (deviceChart) deviceChart.destroy();
+    deviceChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Desktop', 'Mobile', 'Tablet'],
+            datasets: [{ data: [1, 1, 1], backgroundColor: ['#6366f1', '#ec4899', '#f59e0b'], borderWidth: 0, hoverOffset: 6 }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            cutout: '70%'
+        }
+    });
+    loadDeviceData();
+}
+
+async function loadDeviceData() {
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch('/api/visitors', { headers: { 'X-Admin-Token': token } });
+        if (!res.ok) return;
+        const { devices, stats } = await res.json();
+
+        const desktop = devices?.desktop || 0;
+        const mobile = devices?.mobile || 0;
+        const tablet = devices?.tablet || 0;
+        const total = desktop + mobile + tablet || 1;
+
+        if (deviceChart) {
+            deviceChart.data.datasets[0].data = [desktop || 1, mobile || 1, tablet || 1];
+            deviceChart.update();
+        }
+
+        const totalEl = document.getElementById('total-device-count');
+        if (totalEl) totalEl.textContent = total;
+
+        const legendEl = document.getElementById('device-legend');
+        if (legendEl) {
+            const items = [
+                { label: 'Desktop', count: desktop, color: '#6366f1' },
+                { label: 'Mobile', count: mobile, color: '#ec4899' },
+                { label: 'Tablet', count: tablet, color: '#f59e0b' }
+            ];
+            legendEl.innerHTML = items.map(item => `
+                <div class="device-legend-item">
+                    <div class="device-legend-left">
+                        <div class="legend-dot" style="background:${item.color};"></div>
+                        ${item.label}
+                    </div>
+                    <div class="device-legend-right">
+                        <span class="device-legend-count">${item.count}</span>
+                        <span class="device-legend-pct">${Math.round(item.count/total*100)}%</span>
+                    </div>
+                </div>`).join('');
+        }
+    } catch {}
+}
+
+function initSparklines() {
+    const sparkConfigs = [
+        { id: 'revenueSparkline', color: '#6366f1' },
+        { id: 'ordersSparkline', color: '#10b981' },
+        { id: 'visitorsSparkline', color: '#3b82f6' },
+        { id: 'productsSparkline', color: '#f59e0b' }
+    ];
+    sparkConfigs.forEach(({ id, color }) => {
+        const ctx = document.getElementById(id);
+        if (!ctx) return;
+        sparklineCharts[id] = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: Array(7).fill(''),
+                datasets: [{ data: Array(7).fill(0).map(() => Math.random() * 100), borderColor: color, backgroundColor: color + '20', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                scales: { x: { display: false }, y: { display: false } },
+                animation: { duration: 1000 }
+            }
+        });
+    });
+}
+
+async function loadRealtimeData() {
+    const token = AdminAuth.getToken();
+    try {
+        const [visitorRes, orderRes] = await Promise.all([
+            fetch('/api/visitors', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({})),
+            fetch('/api/orders', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ orders: [] }))
+        ]);
+
+        const stats = visitorRes.stats || {};
+        const orders = orderRes.orders || [];
+        const today = new Date().toISOString().split('T')[0];
+        const ordersToday = orders.filter(o => o.createdAt && new Date(o.createdAt).toISOString().split('T')[0] === today).length;
+
+        // Update realtime items
+        const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        set('rt-online', stats.liveNow || 0);
+        set('rt-new', stats.today || 0);
+        set('rt-orders', ordersToday);
+        set('rt-pageviews', stats.total || 0);
+        set('live-visitors-count', stats.liveNow || 0);
+
+        // Top pages
+        const topPagesEl = document.getElementById('top-pages-list');
+        if (topPagesEl && visitorRes.topPages?.length > 0) {
+            const maxCount = visitorRes.topPages[0].count;
+            topPagesEl.innerHTML = visitorRes.topPages.map(p => `
+                <div class="top-page-item">
+                    <div class="top-page-info">
+                        <span class="top-page-name">${p.page || '/'}</span>
+                        <span class="top-page-count">${p.count.toLocaleString('id-ID')}</span>
+                    </div>
+                    <div class="top-page-bar">
+                        <div class="top-page-fill" style="width:${Math.round(p.count/maxCount*100)}%"></div>
+                    </div>
+                </div>`).join('');
+        } else if (topPagesEl) {
+            topPagesEl.innerHTML = `<p style="color:var(--text-muted);font-size:0.85rem;text-align:center;padding:20px;">Belum ada data halaman</p>`;
+        }
+
+    } catch {}
+}
 
 // ============================================================
 // NEWSLETTER MANAGEMENT

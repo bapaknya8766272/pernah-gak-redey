@@ -199,83 +199,209 @@
 
             <!-- Dashboard Section -->
             <section id="dashboard-section" class="content-section active">
-                <div class="stats-row">
-                    <div class="stat-card gradient-purple">
-                        <div class="stat-icon"><i class="fas fa-wallet"></i></div>
-                        <div class="stat-info">
-                            <h3>Total Pendapatan</h3>
-                            <p class="stat-value" id="total-revenue">Rp 0</p>
-                            <span class="stat-change positive"><i class="fas fa-arrow-up"></i> +12%</span>
+
+                <!-- Mini Stats Row (seperti referensi: Sessions, Users, Time spent) -->
+                <div class="mini-stats-row">
+                    <div class="mini-stat-card">
+                        <div class="mini-stat-header">
+                            <span class="mini-stat-label">Total Pendapatan</span>
+                            <span class="mini-stat-period">Bulan ini</span>
+                        </div>
+                        <div class="mini-stat-value" id="total-revenue">Rp 0</div>
+                        <div class="mini-stat-chart">
+                            <canvas id="revenueSparkline" height="50"></canvas>
+                        </div>
+                        <div class="mini-stat-change positive" id="revenue-change">
+                            <i class="fas fa-arrow-up"></i> <span>+0%</span> vs bulan lalu
                         </div>
                     </div>
-                    <div class="stat-card gradient-green">
-                        <div class="stat-icon"><i class="fas fa-shopping-bag"></i></div>
-                        <div class="stat-info">
-                            <h3>Total Pesanan</h3>
-                            <p class="stat-value" id="total-orders">0</p>
-                            <span class="stat-change positive"><i class="fas fa-arrow-up"></i> +5%</span>
+                    <div class="mini-stat-card">
+                        <div class="mini-stat-header">
+                            <span class="mini-stat-label">Total Pesanan</span>
+                            <span class="mini-stat-period">Bulan ini</span>
+                        </div>
+                        <div class="mini-stat-value" id="total-orders">0</div>
+                        <div class="mini-stat-chart">
+                            <canvas id="ordersSparkline" height="50"></canvas>
+                        </div>
+                        <div class="mini-stat-change positive" id="orders-change">
+                            <i class="fas fa-arrow-up"></i> <span>+0%</span> vs bulan lalu
                         </div>
                     </div>
-                    <div class="stat-card gradient-blue">
-                        <div class="stat-icon"><i class="fas fa-users"></i></div>
-                        <div class="stat-info">
-                            <h3>Pengunjung</h3>
-                            <p class="stat-value" id="total-visitors">0</p>
-                            <span class="stat-change"><i class="fas fa-minus"></i> 0%</span>
+                    <div class="mini-stat-card">
+                        <div class="mini-stat-header">
+                            <span class="mini-stat-label">Pengunjung</span>
+                            <span class="mini-stat-period">Hari ini</span>
+                        </div>
+                        <div class="mini-stat-value" id="total-visitors">0</div>
+                        <div class="mini-stat-chart">
+                            <canvas id="visitorsSparkline" height="50"></canvas>
+                        </div>
+                        <div class="mini-stat-change" id="visitors-change">
+                            <i class="fas fa-circle" style="color:var(--accent);font-size:0.6rem;"></i>
+                            <span id="live-visitors-count">0</span> online sekarang
                         </div>
                     </div>
-                    <div class="stat-card gradient-orange">
-                        <div class="stat-icon"><i class="fas fa-box"></i></div>
-                        <div class="stat-info">
-                            <h3>Produk Aktif</h3>
-                            <p class="stat-value" id="total-products">0</p>
-                            <span class="stat-change negative" id="stock-alert">
-                                <i class="fas fa-exclamation-triangle"></i> <span id="low-stock-count">0</span> stok menipis
-                            </span>
+                    <div class="mini-stat-card">
+                        <div class="mini-stat-header">
+                            <span class="mini-stat-label">Produk Aktif</span>
+                            <span class="mini-stat-period">Total</span>
+                        </div>
+                        <div class="mini-stat-value" id="total-products">0</div>
+                        <div class="mini-stat-chart">
+                            <canvas id="productsSparkline" height="50"></canvas>
+                        </div>
+                        <div class="mini-stat-change negative" id="stock-alert" style="display:none;">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <span id="low-stock-count">0</span> stok menipis
+                        </div>
+                        <div class="mini-stat-change positive" id="stock-ok">
+                            <i class="fas fa-check-circle"></i> Stok aman
                         </div>
                     </div>
                 </div>
 
-                <div class="charts-row">
-                    <div class="chart-card">
-                        <div class="chart-header">
-                            <h3><i class="fas fa-chart-line"></i> Grafik Penjualan</h3>
-                            <select id="sales-period" onchange="updateSalesChart()">
+                <!-- Main Charts Row -->
+                <div class="dashboard-grid">
+                    <!-- Site Traffic Chart (besar, seperti referensi) -->
+                    <div class="dash-card dash-card-wide">
+                        <div class="dash-card-header">
+                            <div>
+                                <h3>Traffic Pengunjung</h3>
+                                <p class="dash-card-sub">Pengunjung baru vs kembali</p>
+                            </div>
+                            <div style="display:flex;gap:12px;align-items:center;">
+                                <div class="legend-dot" style="background:#6366f1;"></div><span style="font-size:0.8rem;color:var(--text-secondary);">Pengunjung Baru</span>
+                                <div class="legend-dot" style="background:#10b981;"></div><span style="font-size:0.8rem;color:var(--text-secondary);">Kembali</span>
+                                <select id="traffic-period" onchange="updateTrafficChart()" class="dash-select">
+                                    <option value="7">7 Hari</option>
+                                    <option value="30">30 Hari</option>
+                                    <option value="90">3 Bulan</option>
+                                </select>
+                            </div>
+                        </div>
+                        <canvas id="trafficChart" height="200"></canvas>
+                    </div>
+
+                    <!-- Devices Donut (kanan atas, seperti referensi) -->
+                    <div class="dash-card">
+                        <div class="dash-card-header">
+                            <div>
+                                <h3>Perangkat</h3>
+                                <p class="dash-card-sub">Distribusi device pengunjung</p>
+                            </div>
+                            <span class="dash-badge">Hari ini</span>
+                        </div>
+                        <div style="position:relative;height:160px;display:flex;align-items:center;justify-content:center;">
+                            <canvas id="deviceChart"></canvas>
+                            <div style="position:absolute;text-align:center;">
+                                <div style="font-size:1.8rem;font-weight:800;" id="total-device-count">0</div>
+                                <div style="font-size:0.75rem;color:var(--text-muted);">Total</div>
+                            </div>
+                        </div>
+                        <div id="device-legend" style="margin-top:15px;display:flex;flex-direction:column;gap:8px;"></div>
+                    </div>
+
+                    <!-- Sales Chart -->
+                    <div class="dash-card dash-card-wide">
+                        <div class="dash-card-header">
+                            <div>
+                                <h3>Grafik Penjualan</h3>
+                                <p class="dash-card-sub">Revenue per periode</p>
+                            </div>
+                            <select id="sales-period" onchange="updateSalesChart()" class="dash-select">
                                 <option value="7">7 Hari</option>
                                 <option value="30">30 Hari</option>
                                 <option value="90">3 Bulan</option>
                             </select>
                         </div>
-                        <canvas id="salesChart"></canvas>
+                        <canvas id="salesChart" height="200"></canvas>
                     </div>
-                    <div class="chart-card">
-                        <div class="chart-header">
-                            <h3><i class="fas fa-chart-pie"></i> Penjualan per Kategori</h3>
+
+                    <!-- Category Donut -->
+                    <div class="dash-card">
+                        <div class="dash-card-header">
+                            <div>
+                                <h3>Kategori Produk</h3>
+                                <p class="dash-card-sub">Penjualan per kategori</p>
+                            </div>
                         </div>
-                        <canvas id="categoryChart"></canvas>
+                        <canvas id="categoryChart" height="160"></canvas>
                     </div>
                 </div>
 
-                <div class="recent-orders">
-                    <div class="card-header">
-                        <h3><i class="fas fa-clock"></i> Pesanan Terbaru</h3>
-                        <a href="#orders" class="btn btn-sm btn-secondary" onclick="showSection('orders')">Lihat Semua</a>
+                <!-- Bottom Row: Real-time + Top Pages + Recent Orders -->
+                <div class="dashboard-bottom">
+                    <!-- Real-time Data (seperti referensi) -->
+                    <div class="dash-card realtime-card">
+                        <div class="dash-card-header">
+                            <div>
+                                <h3>Data Real-time</h3>
+                                <p class="dash-card-sub">Update setiap 30 detik</p>
+                            </div>
+                            <span class="live-badge"><span class="live-dot"></span> LIVE</span>
+                        </div>
+                        <div class="realtime-list">
+                            <div class="realtime-item">
+                                <span class="realtime-label">Online sekarang</span>
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <span class="realtime-value" id="rt-online">0</span>
+                                    <span class="realtime-max" id="rt-online-max">maks 0</span>
+                                </div>
+                            </div>
+                            <div class="realtime-item">
+                                <span class="realtime-label">Pengunjung baru</span>
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <span class="realtime-value" id="rt-new">0</span>
+                                    <span class="realtime-max" id="rt-new-max">maks 0</span>
+                                </div>
+                            </div>
+                            <div class="realtime-item">
+                                <span class="realtime-label">Pesanan hari ini</span>
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <span class="realtime-value" id="rt-orders">0</span>
+                                    <span class="realtime-max" id="rt-orders-max">maks 0</span>
+                                </div>
+                            </div>
+                            <div class="realtime-item">
+                                <span class="realtime-label">Halaman dilihat</span>
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <span class="realtime-value" id="rt-pageviews">0</span>
+                                    <span class="realtime-max" id="rt-pageviews-max">maks 0</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="table-responsive">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Order ID</th>
-                                    <th>Produk</th>
-                                    <th>Total</th>
-                                    <th>Status</th>
-                                    <th>Tanggal</th>
-                                </tr>
-                            </thead>
-                            <tbody id="recent-orders-body"></tbody>
-                        </table>
+
+                    <!-- Top Pages (seperti referensi) -->
+                    <div class="dash-card">
+                        <div class="dash-card-header">
+                            <div>
+                                <h3>Halaman Populer</h3>
+                                <p class="dash-card-sub">Bulan ini</p>
+                            </div>
+                        </div>
+                        <div id="top-pages-list" class="top-pages-list"></div>
+                    </div>
+
+                    <!-- Recent Orders -->
+                    <div class="dash-card dash-card-wide">
+                        <div class="dash-card-header">
+                            <div>
+                                <h3>Pesanan Terbaru</h3>
+                                <p class="dash-card-sub">5 pesanan terakhir</p>
+                            </div>
+                            <button class="dash-link" onclick="showSection('orders')">Lihat semua →</button>
+                        </div>
+                        <div class="table-container" style="margin:0;">
+                            <table class="data-table">
+                                <thead><tr><th>Order ID</th><th>Produk</th><th>Total</th><th>Status</th><th>Tanggal</th></tr></thead>
+                                <tbody id="recent-orders-body"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
+
             </section>
 
             <!-- Products Section -->

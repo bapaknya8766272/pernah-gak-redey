@@ -1575,3 +1575,329 @@ select option {
         grid-template-columns: 1fr;
     }
 }
+
+/* ========================================
+   MODERN DASHBOARD REDESIGN
+   Terinspirasi dari Value Analytics UI
+   ======================================== */
+
+/* ── Mini Stats Row (top 4 cards) ─────── */
+.mini-stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.mini-stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: var(--transition);
+}
+
+.mini-stat-card:hover {
+    border-color: var(--primary);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(99, 102, 241, 0.15);
+}
+
+.mini-stat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.mini-stat-label {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.mini-stat-period {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background: var(--bg-glass);
+    padding: 3px 8px;
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+}
+
+.mini-stat-value {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1.2;
+    margin-bottom: 8px;
+}
+
+.mini-stat-chart {
+    margin: 8px 0;
+    height: 50px;
+}
+
+.mini-stat-change {
+    font-size: 0.78rem;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 4px;
+}
+
+.mini-stat-change.positive { color: var(--accent); }
+.mini-stat-change.negative { color: var(--danger); }
+.mini-stat-change:not(.positive):not(.negative) { color: var(--text-muted); }
+
+/* ── Dashboard Grid ───────────────────── */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.dashboard-bottom {
+    display: grid;
+    grid-template-columns: 1fr 1fr 2fr;
+    gap: 16px;
+}
+
+/* ── Dash Card ────────────────────────── */
+.dash-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 20px;
+    transition: var(--transition);
+}
+
+.dash-card:hover {
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.dash-card-wide {
+    /* spans full width in its grid area */
+}
+
+.dash-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+}
+
+.dash-card-header h3 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.dash-card-sub {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.dash-select {
+    background: var(--bg-glass) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: var(--text-secondary) !important;
+    font-size: 0.8rem;
+    cursor: pointer;
+    outline: none;
+}
+
+.dash-badge {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--primary);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.dash-link {
+    background: none;
+    border: none;
+    color: var(--primary);
+    font-size: 0.82rem;
+    cursor: pointer;
+    font-family: inherit;
+    padding: 0;
+    transition: var(--transition);
+}
+
+.dash-link:hover { color: var(--primary-dark); text-decoration: underline; }
+
+/* ── Legend Dot ───────────────────────── */
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* ── Live Badge ───────────────────────── */
+.live-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--accent);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.live-dot {
+    width: 7px;
+    height: 7px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: livePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes livePulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* ── Real-time Card ───────────────────── */
+.realtime-card { }
+
+.realtime-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.realtime-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.realtime-item:last-child { border-bottom: none; }
+
+.realtime-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.realtime-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.realtime-max {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    background: var(--bg-glass);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+/* ── Top Pages List ───────────────────── */
+.top-pages-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.top-page-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.top-page-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.top-page-name {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+}
+
+.top-page-count {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.top-page-bar {
+    height: 4px;
+    background: var(--bg-glass);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.top-page-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--gradient-purple);
+    transition: width 0.8s ease;
+}
+
+/* ── Device Legend ────────────────────── */
+.device-legend-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.82rem;
+}
+
+.device-legend-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+}
+
+.device-legend-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.device-legend-count { font-weight: 600; color: var(--text-primary); }
+.device-legend-pct { color: var(--text-muted); font-size: 0.75rem; }
+
+/* ── Responsive Dashboard ─────────────── */
+@media (max-width: 1200px) {
+    .mini-stats-row { grid-template-columns: repeat(2, 1fr); }
+    .dashboard-grid { grid-template-columns: 1fr; }
+    .dashboard-bottom { grid-template-columns: 1fr 1fr; }
+    .dashboard-bottom .dash-card-wide { grid-column: 1 / -1; }
+}
+
+@media (max-width: 768px) {
+    .mini-stats-row { grid-template-columns: 1fr 1fr; }
+    .dashboard-bottom { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+    .mini-stats-row { grid-template-columns: 1fr; }
+    .mini-stat-value { font-size: 1.5rem; }
+}
