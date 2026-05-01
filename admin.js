@@ -337,6 +337,17 @@ async function changePassword() {
 let salesChart, categoryChart, trafficChart, deviceChart;
 let sparklineCharts = {};
 
+// CHART_DEFAULTS harus dideklarasikan sebelum initCharts dipanggil
+const CHART_DEFAULTS = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#71717a', font: { size: 11 } } },
+        x: { grid: { display: false }, ticks: { color: '#71717a', font: { size: 11 } } }
+    }
+};
+
 function initCharts() {
     initSalesChart();
     initCategoryChart();
@@ -947,7 +958,7 @@ async function clearAllOrders() {
 // ========================================
 // TESTIMONIALS (XSS-safe)
 // ========================================
-async function renderTestimonials() {
+async function renderTestimonials(filterQuery = '') {
     const grid = document.getElementById('testimonials-grid');
     if (!grid) return;
 
@@ -966,6 +977,14 @@ async function renderTestimonials() {
     // Fallback ke cache lokal
     if (testimonials.length === 0) {
         testimonials = TestimonialManager.getAll();
+    }
+
+    // Filter berdasarkan query
+    if (filterQuery) {
+        testimonials = testimonials.filter(t =>
+            (t.name||'').toLowerCase().includes(filterQuery) ||
+            (t.message||'').toLowerCase().includes(filterQuery)
+        );
     }
 
     if (testimonials.length === 0) {
@@ -1032,6 +1051,11 @@ async function deleteTestimonialDB(id) {
 
 // Backward compat
 function deleteTestimonial(index) { renderTestimonials(); }
+
+function filterTestimonials() {
+    const query = document.getElementById('testi-search')?.value?.toLowerCase() || '';
+    renderTestimonials(query);
+}
 
 async function renderCustomers() {
     const tbody = document.getElementById('customers-table-body');
@@ -2578,15 +2602,6 @@ window.loadRealtimeData = loadRealtimeData;
 // ============================================================
 // CHART FUNCTIONS — MODERN DASHBOARD
 // ============================================================
-const CHART_DEFAULTS = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { legend: { display: false } },
-    scales: {
-        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#71717a', font: { size: 11 } } },
-        x: { grid: { display: false }, ticks: { color: '#71717a', font: { size: 11 } } }
-    }
-};
 
 function initSalesChart() {
     const ctx = document.getElementById('salesChart');
