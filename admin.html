@@ -51,6 +51,11 @@
                     <button class="btn btn-primary btn-full btn-lg" onclick="login()">
                         <i class="fas fa-sign-in-alt"></i> Masuk
                     </button>
+                    <div style="text-align:center;margin-top:12px;">
+                        <button onclick="forgotPassword()" style="background:none;border:none;color:var(--primary);font-size:0.85rem;cursor:pointer;font-family:inherit;">
+                            <i class="fas fa-key"></i> Lupa Password?
+                        </button>
+                    </div>
                 </div>
                 
                 <p class="login-error" id="login-error">
@@ -699,6 +704,48 @@
                         </div>
                     </div>
 
+                    <!-- Promo Spesial -->
+                    <div class="settings-card">
+                        <div class="settings-header">
+                            <div class="settings-icon" style="background:var(--gradient-orange);"><i class="fas fa-fire"></i></div>
+                            <div>
+                                <h3>Promo Spesial</h3>
+                                <p>Aktifkan/nonaktifkan promo di website</p>
+                            </div>
+                        </div>
+                        <div class="settings-body">
+                            <div id="promo-status-display" style="margin-bottom:15px;padding:12px;background:var(--bg-glass);border-radius:10px;border:1px solid var(--border-color);">
+                                <div style="display:flex;justify-content:space-between;align-items:center;">
+                                    <span style="font-weight:600;">Status Promo</span>
+                                    <span id="promo-active-badge" style="padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:700;">Loading...</span>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Kode Promo</label>
+                                <input type="text" id="promo-code-input" placeholder="Contoh: ALFA20" style="text-transform:uppercase;">
+                            </div>
+                            <div class="form-group">
+                                <label>Diskon (%)</label>
+                                <input type="number" id="promo-discount-input" placeholder="Contoh: 20" min="1" max="90">
+                            </div>
+                            <div class="form-group">
+                                <label>Pesan Promo</label>
+                                <input type="text" id="promo-message-input" placeholder="Contoh: Promo Spesial Hari Ini!">
+                            </div>
+                            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                                <button class="btn btn-primary" onclick="savePromoSettings()">
+                                    <i class="fas fa-save"></i> Simpan
+                                </button>
+                                <button class="btn btn-success" onclick="togglePromoActive(true)" style="background:var(--accent);">
+                                    <i class="fas fa-play"></i> Aktifkan
+                                </button>
+                                <button class="btn btn-danger" onclick="togglePromoActive(false)">
+                                    <i class="fas fa-stop"></i> Nonaktifkan
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Danger Zone -->
                     <div class="settings-card danger-zone">
                         <div class="settings-header">
@@ -990,5 +1037,11 @@
     </div>
     <script src="scripts.js"></script>
     <script src="admin.js"></script>
+    <script>
+        // Safety: pastikan semua fungsi admin tersedia meski ada error
+        window.addEventListener('error', function(e) {
+            console.warn('Admin JS Error (non-fatal):', e.message, 'at', e.filename, e.lineno);
+        });
+    </script>
 </body>
 </html>

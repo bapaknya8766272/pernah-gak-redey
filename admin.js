@@ -473,6 +473,7 @@ function showSection(sectionName) {
         case 'newsletter':  renderNewsletter(); break;
         case 'flash-sale':  renderFlashSale(); break;
         case 'reviews':     renderReviews(); break;
+        case 'settings':    loadSettings(); loadPromoSettings(); break;
     }
 }
 
@@ -3312,3 +3313,179 @@ window.deleteTestimonialLocal = deleteTestimonialLocal;
 window.filterReviews = filterReviews;
 window.exportReviews = exportReviews;
 window.changePassword = changePassword;
+
+// ============================================================
+// FITUR: PROMO SPESIAL — Aktif/Nonaktif dari Admin
+// ============================================================
+async function loadPromoSettings() {
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch('/api/settings', { headers: { 'X-Admin-Token': token } });
+        if (res.ok) {
+            const { settings } = await res.json();
+            const code = settings.promo_code || '';
+            const discount = settings.promo_discount || '';
+            const message = settings.promo_message || '';
+            const active = settings.promo_active === 'true';
+
+            const codeEl = document.getElementById('promo-code-input');
+            const discEl = document.getElementById('promo-discount-input');
+            const msgEl = document.getElementById('promo-message-input');
+            const badge = document.getElementById('promo-active-badge');
+
+            if (codeEl) codeEl.value = code !== '••••••••' ? code : '';
+            if (discEl) discEl.value = discount !== '••••••••' ? discount : '';
+            if (msgEl) msgEl.value = message !== '••••••••' ? message : '';
+            if (badge) {
+                badge.textContent = active ? '🟢 AKTIF' : '🔴 NONAKTIF';
+                badge.style.background = active ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)';
+                badge.style.color = active ? 'var(--accent)' : 'var(--danger)';
+            }
+        }
+    } catch {}
+}
+
+async function savePromoSettings() {
+    const code = document.getElementById('promo-code-input')?.value.trim().toUpperCase();
+    const discount = document.getElementById('promo-discount-input')?.value.trim();
+    const message = document.getElementById('promo-message-input')?.value.trim();
+
+    if (!code) { Swal.fire({ icon: 'warning', title: 'Isi kode promo!', background: '#1a1a2e', color: '#fff' }); return; }
+
+    await syncSettingsToDB({
+        ...(code ? { promo_code: code } : {}),
+        ...(discount ? { promo_discount: discount } : {}),
+        ...(message ? { promo_message: message } : {})
+    });
+
+    // Update PROMO_CODES di localStorage untuk website
+    const promos = JSON.parse(localStorage.getItem('promo_codes') || '{}');
+    if (code && discount) promos[code] = parseInt(discount) / 100;
+    localStorage.setItem('promo_codes', JSON.stringify(promos));
+
+    addActivityLog('Pengaturan', `Simpan promo spesial: ${code} (${discount}%)`);
+    Swal.fire({ icon: 'success', title: 'Promo disimpan!', text: `Kode: ${code} — Diskon: ${discount}%`, background: '#1a1a2e', color: '#fff', timer: 2000, showConfirmButton: false });
+    loadPromoSettings();
+}
+
+async function togglePromoActive(active) {
+    await syncSettingsToDB({ promo_active: active.toString() });
+
+    // Sync ke localStorage untuk website
+    localStorage.setItem('promo_active', active.toString());
+
+    const badge = document.getElementById('promo-active-badge');
+    if (badge) {
+        badge.textContent = active ? '🟢 AKTIF' : '🔴 NONAKTIF';
+        badge.style.background = active ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)';
+        badge.style.color = active ? 'var(--accent)' : 'var(--danger)';
+    }
+
+    addActivityLog('Pengaturan', `${active ? 'Aktifkan' : 'Nonaktifkan'} promo spesial`);
+    Swal.fire({
+        icon: active ? 'success' : 'info',
+        title: active ? '🟢 Promo Diaktifkan!' : '🔴 Promo Dinonaktifkan',
+        text: active ? 'Promo spesial sekarang aktif di website.' : 'Promo spesial dinonaktifkan.',
+        background: '#1a1a2e', color: '#fff', timer: 1500, showConfirmButton: false
+    });
+}
+
+// ============================================================
+// FITUR: LUPA PASSWORD ADMIN
+// ============================================================
+async function forgotPassword() {
+    const { value: username } = await Swal.fire({
+        title: '🔑 Lupa Password',
+        html: `
+            <p style="color:var(--text-secondary);margin-bottom:15px;font-size:0.9rem;">
+                Masukkan username admin kamu. Jika cocok dengan yang tersimpan di database, 
+                kamu akan mendapat instruksi reset password.
+            </p>
+            <input id="forgot-username" class="swal2-input" placeholder="Username admin" autocomplete="off">
+        `,
+        confirmButtonText: 'Kirim',
+        cancelButtonText: 'Batal',
+        showCancelButton: true,
+        background: '#1a1a2e',
+        color: '#fff',
+        preConfirm: () => {
+            const val = document.getElementById('forgot-username').value.trim();
+            if (!val) { Swal.showValidationMessage('Username harus diisi!'); return false; }
+            return val;
+        }
+    });
+
+    if (!username) return;
+
+    try {
+        const res = await fetch('/api/admin-auth?action=check-username', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.exists) {
+            Swal.fire({
+                title: '✅ Username Ditemukan',
+                html: `
+                    <p style="color:var(--text-secondary);margin-bottom:15px;">
+                        Username <strong>${username}</strong> ditemukan. 
+                        Untuk reset password, gunakan salah satu cara berikut:
+                    </p>
+                    <div style="text-align:left;background:var(--bg-glass);border-radius:10px;padding:15px;font-size:0.85rem;">
+                        <p style="margin-bottom:10px;"><strong>Cara 1 — Via Postman/API:</strong></p>
+                        <code style="background:#1a1a2e;padding:8px;border-radius:6px;display:block;font-size:0.75rem;word-break:break-all;">
+                            POST /api/admin-auth?action=reset-password<br>
+                            Body: {"username":"${username}","newPassword":"PasswordBaru123!"}
+                        </code>
+                        <p style="margin-top:10px;margin-bottom:10px;"><strong>Cara 2 — Hubungi developer:</strong></p>
+                        <p>Reset langsung di MongoDB Atlas → collection admins → hapus dokumen → setup ulang.</p>
+                    </div>`,
+                background: '#1a1a2e',
+                color: '#fff',
+                confirmButtonText: 'Mengerti'
+            });
+        } else {
+            Swal.fire({ icon: 'error', title: 'Username tidak ditemukan', text: 'Pastikan username yang dimasukkan benar.', background: '#1a1a2e', color: '#fff' });
+        }
+    } catch {
+        // Fallback: tampilkan instruksi manual
+        Swal.fire({
+            title: '🔑 Reset Password Manual',
+            html: `
+                <p style="color:var(--text-secondary);margin-bottom:15px;font-size:0.9rem;">
+                    Untuk reset password admin, gunakan cara berikut:
+                </p>
+                <div style="text-align:left;background:var(--bg-glass);border-radius:10px;padding:15px;font-size:0.82rem;">
+                    <p><strong>Via Browser Console (F12):</strong></p>
+                    <code style="background:#0a0a0f;padding:8px;border-radius:6px;display:block;margin-top:8px;word-break:break-all;font-size:0.72rem;">
+fetch('/api/admin-auth?action=setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'admin',password:'PasswordBaru123!'})}).then(r=>r.json()).then(console.log)
+                    </code>
+                    <p style="margin-top:10px;color:var(--warning);font-size:0.8rem;">⚠️ Hanya berhasil jika belum ada admin di database.</p>
+                </div>`,
+            background: '#1a1a2e',
+            color: '#fff',
+            confirmButtonText: 'Mengerti'
+        });
+    }
+}
+
+// Tambahkan endpoint check-username ke admin-auth (dipanggil dari forgotPassword)
+// Endpoint ini sudah ada di api/admin-auth.js sebagai action=check
+
+// ============================================================
+// EXPOSE FUNGSI BARU KE WINDOW
+// ============================================================
+window.savePromoSettings = savePromoSettings;
+window.togglePromoActive = togglePromoActive;
+window.loadPromoSettings = loadPromoSettings;
+window.forgotPassword = forgotPassword;
+window.showDailySummary = showDailySummary;
+window.markAllPendingCompleted = markAllPendingCompleted;
+window.globalSearch = globalSearch;
+window.exportOrdersCSV = exportOrdersCSV;
+window.exportOrdersJSON = exportOrdersJSON;
+window.deleteNewsletterSubscriber = deleteNewsletterSubscriber;
+window.updateNewsletterBadge = updateNewsletterBadge;
+window.deleteTestimonialLocal = deleteTestimonialLocal;

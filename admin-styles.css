@@ -1905,62 +1905,73 @@ select option {
 /* ── Dashboard Compact — tidak perlu scroll ─────────────────── */
 .dashboard-grid {
     grid-template-columns: 2fr 1fr;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: 10px;
+    margin-bottom: 10px;
 }
 
 .dashboard-bottom {
     grid-template-columns: 1fr 1fr 2fr;
-    gap: 12px;
+    gap: 10px;
 }
 
 .mini-stats-row {
-    gap: 12px;
-    margin-bottom: 12px;
-}
-
-.mini-stat-card {
-    padding: 14px;
-}
-
-.mini-stat-value {
-    font-size: 1.5rem;
-    margin-bottom: 4px;
-}
-
-.mini-stat-chart {
-    height: 40px;
-    margin: 4px 0;
-}
-
-.dash-card {
-    padding: 14px;
-}
-
-.dash-card-header {
+    gap: 10px;
     margin-bottom: 10px;
 }
 
+.mini-stat-card {
+    padding: 12px 14px;
+}
+
+.mini-stat-value {
+    font-size: 1.4rem;
+    margin-bottom: 2px;
+}
+
+.mini-stat-chart {
+    height: 35px;
+    margin: 3px 0;
+}
+
+.dash-card {
+    padding: 12px 14px;
+}
+
+.dash-card-header {
+    margin-bottom: 8px;
+}
+
 .dash-card-header h3 {
-    font-size: 0.88rem;
+    font-size: 0.85rem;
+    margin-bottom: 1px;
 }
 
 .dash-card-sub {
-    font-size: 0.72rem;
+    font-size: 0.7rem;
 }
+
+/* Chart heights — lebih kecil agar muat di layar */
+#trafficChart { max-height: 120px !important; }
+#salesChart   { max-height: 120px !important; }
+#deviceChart  { max-height: 110px !important; }
+#categoryChart { max-height: 110px !important; }
 
 /* Realtime list lebih compact */
 .realtime-item {
-    padding: 8px 0;
+    padding: 6px 0;
 }
 
 .realtime-value {
-    font-size: 1rem;
+    font-size: 0.95rem;
 }
 
 /* Top pages compact */
 .top-page-item {
     gap: 2px;
+}
+
+.top-page-bar {
+    height: 3px;
 }
 
 /* Responsive compact */
@@ -1972,4 +1983,13 @@ select option {
     .dashboard-grid { grid-template-columns: 1fr; }
     .dashboard-bottom { grid-template-columns: 1fr 1fr; }
     .dashboard-bottom .dash-card-wide { grid-column: 1 / -1; }
+}
+
+@media (max-width: 768px) {
+    .mini-stats-row { grid-template-columns: 1fr 1fr; }
+    .dashboard-bottom { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+    .mini-stats-row { grid-template-columns: 1fr; }
 }
