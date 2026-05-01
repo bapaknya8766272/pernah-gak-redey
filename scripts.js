@@ -1318,8 +1318,6 @@ const QRISPayment = {
     },
 
     _getConfig() {
-        // Credentials QRIS disimpan di server (Vercel env vars)
-        // Client hanya perlu tahu interval cek status
         return {
             checkInterval: parseInt(localStorage.getItem('qris_check_interval') || '15000')
         };
@@ -1333,10 +1331,7 @@ const QRISPayment = {
         }
 
         const cfg = this._getConfig();
-        if (!cfg.apikey || !cfg.qrisCode) {
-            Utils.showToast('Konfigurasi QRIS belum diatur. Hubungi admin.', 'error');
-            return;
-        }
+        // Tidak perlu cek apikey/qrisCode — semua ada di server (/api/qris)
 
         // Hitung total dengan diskon
         let subtotal = CartManager.getTotal();
