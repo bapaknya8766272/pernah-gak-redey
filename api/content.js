@@ -298,7 +298,65 @@ export default async function handler(req, res) {
             }
         }
 
-        return res.status(400).json({ error: 'Type tidak dikenal. Gunakan: newsletter, flash-sale, reviews, testimonials, activity-log' });
+        // ════════════════════════════════════════════════════
+        // VOUCHERS
+        // ════════════════════════════════════════════════════
+        if (type === 'vouchers') {
+            if (!admin) return res.status(401).json({ error: 'Admin only' });
+            const col = await getCollection('vouchers');
+
+            if (req.method === 'GET') {
+                const vouchers = await col.find({}).sort({ createdAt: -1 }).toArray();
+                return res.status(200).json({ vouchers });
+            }
+
+            if (req.method === 'POST') {
+                const { code, type: vtype, value, maxUse, expiry, minPurchase, active } = req.body;
+                if (!code || !value) return res.status(400).json({ error: 'code dan value diperlukan' });
+                const existing = await col.findOne({ code: code.toUpperCase() });
+                if (existing) return res.status(409).json({ error: 'Kode voucher sudah ada' });
+                const doc = {
+                    id: 'vch_' + Date.now().toString(36),
+                    code: sanitize(code, 50).toUpperCase(),
+                    type: ['percent', 'fixed'].includes(vtype) ? vtype : 'percent',
+                    value: parseInt(value) || 0,
+                    maxUse: parseInt(maxUse) || 0,
+                    expiry: expiry || null,
+                    minPurchase: parseInt(minPurchase) || 0,
+                    usedCount: 0,
+                    active: active !== false,
+                    createdAt: new Date()
+                };
+                await col.insertOne(doc);
+                return res.status(201).json({ success: true, voucher: doc });
+            }
+
+            if (req.method === 'PUT') {
+                const { id } = req.query;
+                if (!id) return res.status(400).json({ error: 'id diperlukan' });
+                const update = {};
+                const { code, type: vtype, value, maxUse, expiry, minPurchase, active, usedCount } = req.body;
+                if (code !== undefined) update.code = sanitize(code, 50).toUpperCase();
+                if (vtype !== undefined) update.type = vtype;
+                if (value !== undefined) update.value = parseInt(value);
+                if (maxUse !== undefined) update.maxUse = parseInt(maxUse);
+                if (expiry !== undefined) update.expiry = expiry;
+                if (minPurchase !== undefined) update.minPurchase = parseInt(minPurchase);
+                if (active !== undefined) update.active = !!active;
+                if (usedCount !== undefined) update.usedCount = parseInt(usedCount);
+                await col.updateOne({ id }, { $set: update });
+                return res.status(200).json({ success: true });
+            }
+
+            if (req.method === 'DELETE') {
+                const { id } = req.query;
+                if (!id) return res.status(400).json({ error: 'id diperlukan' });
+                await col.deleteOne({ id });
+                return res.status(200).json({ success: true });
+            }
+        }
+
+        return res.status(400).json({ error: 'Type tidak dikenal' });
 
     } catch (err) {
         console.error('[content] Error:', err.message);
