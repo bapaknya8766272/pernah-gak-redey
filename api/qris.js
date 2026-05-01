@@ -42,12 +42,19 @@ async function getSetting(key) {
     const settings = await getCollection('settings');
     const doc = await settings.findOne({ key });
     if (!doc?.value) return '';
-    // Coba decrypt (jika gagal, return as-is — berarti tidak terenkripsi)
+
+    const val = doc.value;
+
+    // Cek apakah nilai terenkripsi (format: hex:hex:hex)
+    const isEncrypted = /^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/i.test(val);
+    if (!isEncrypted) return val; // plain text, return langsung
+
+    // Coba decrypt
     try {
-        const decrypted = decrypt(doc.value);
-        return decrypted || doc.value;
+        const decrypted = decrypt(val);
+        return decrypted || val;
     } catch {
-        return doc.value;
+        return val; // fallback ke nilai asli
     }
 }
 
@@ -72,6 +79,26 @@ export default async function handler(req, res) {
     if (!checkRate(ip)) return res.status(429).json({ error: 'Terlalu banyak permintaan' });
 
     const { action, amount, orderId, transactionId } = req.body || {};
+
+    // DEBUG endpoint — cek apakah settings terbaca (hapus setelah confirmed working)
+    if (action === 'debug') {
+        const [apikey, qrisCode, merchantId, keyorkut] = await Promise.all([
+            getSetting('qris_apikey'),
+            getSetting('qris_code'),
+            getSetting('qris_merchant'),
+            getSetting('qris_keyorkut')
+        ]);
+        return res.status(200).json({
+            hasApikey: !!apikey,
+            apikeyPreview: apikey ? apikey.substring(0, 4) + '...' : 'KOSONG',
+            hasQrisCode: !!qrisCode,
+            qrisCodePreview: qrisCode ? qrisCode.substring(0, 20) + '...' : 'KOSONG',
+            hasMerchantId: !!merchantId,
+            merchantIdPreview: merchantId || 'KOSONG',
+            hasKeyorkut: !!keyorkut,
+            keyorkutPreview: keyorkut ? keyorkut.substring(0, 10) + '...' : 'KOSONG'
+        });
+    }
 
     try {
         // Ambil semua credentials dari MongoDB
