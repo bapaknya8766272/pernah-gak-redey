@@ -836,13 +836,21 @@ async function openRestockModal(productId) {
             if (res.ok) product = (await res.json()).product;
         } catch {}
     }
-    if (!product) { Utils.showToast ? Utils.showToast('Produk tidak ditemukan', 'error') : alert('Produk tidak ditemukan'); return; }
+    if (!product) { Swal.fire({ icon: 'warning', title: 'Produk tidak ditemukan', background: '#1a1a2e', color: '#fff' }); return; }
 
-    document.getElementById('restock-product-id').value = productId;
-    document.getElementById('restock-product-name').textContent = product.name;
-    document.getElementById('restock-current-stock').textContent = product.stock;
-    document.getElementById('restock-amount').value = '';
-    document.getElementById('restock-modal').classList.add('active');
+    const modal = document.getElementById('restock-modal');
+    const nameEl = document.getElementById('restock-product-name');
+    const stockEl = document.getElementById('restock-current-stock');
+    const idEl = document.getElementById('restock-product-id');
+    const amountEl = document.getElementById('restock-amount');
+
+    if (!modal) { Swal.fire({ icon: 'error', title: 'Modal tidak ditemukan', text: 'Elemen restock-modal tidak ada di halaman.', background: '#1a1a2e', color: '#fff' }); return; }
+
+    if (idEl) idEl.value = productId;
+    if (nameEl) nameEl.textContent = product.name;
+    if (stockEl) stockEl.textContent = product.stock;
+    if (amountEl) amountEl.value = '';
+    modal.classList.add('active');
 }
 
 function closeRestockModal() {
@@ -1916,6 +1924,11 @@ async function renderVouchers() {
 
 function openVoucherModal(editId = null) {
     const modal = document.getElementById('voucher-modal');
+    if (!modal) {
+        Swal.fire({ icon: 'error', title: 'Modal tidak ditemukan', text: 'Elemen voucher-modal tidak ada. Pastikan admin.html sudah di-push terbaru.', background: '#1a1a2e', color: '#fff' });
+        return;
+    }
+
     const title = document.getElementById('voucher-modal-title');
     const editInput = document.getElementById('voucher-edit-id');
     const codeInput = document.getElementById('voucher-code');
@@ -1924,29 +1937,29 @@ function openVoucherModal(editId = null) {
     const maxUseInput = document.getElementById('voucher-max-use');
     const expiryInput = document.getElementById('voucher-expiry');
     const minPurchaseInput = document.getElementById('voucher-min-purchase');
-    
+
     if (editId) {
         const vouchers = JSON.parse(localStorage.getItem('vouchers') || '[]');
         const voucher = vouchers.find(v => v.id === editId);
         if (voucher) {
-            title.innerHTML = '<i class="fas fa-ticket-alt"></i> Edit Voucher';
-            editInput.value = voucher.id;
-            codeInput.value = voucher.code;
-            typeInput.value = voucher.type;
-            valueInput.value = voucher.value;
-            maxUseInput.value = voucher.maxUse || '';
-            expiryInput.value = voucher.expiry || '';
-            minPurchaseInput.value = voucher.minPurchase || 0;
+            if (title) title.innerHTML = '<i class="fas fa-ticket-alt"></i> Edit Voucher';
+            if (editInput) editInput.value = voucher.id;
+            if (codeInput) codeInput.value = voucher.code;
+            if (typeInput) typeInput.value = voucher.type;
+            if (valueInput) valueInput.value = voucher.value;
+            if (maxUseInput) maxUseInput.value = voucher.maxUse || '';
+            if (expiryInput) expiryInput.value = voucher.expiry || '';
+            if (minPurchaseInput) minPurchaseInput.value = voucher.minPurchase || 0;
         }
     } else {
-        title.innerHTML = '<i class="fas fa-ticket-alt"></i> Buat Voucher';
-        editInput.value = '';
-        codeInput.value = '';
-        typeInput.value = 'percent';
-        valueInput.value = '';
-        maxUseInput.value = '';
-        expiryInput.value = '';
-        minPurchaseInput.value = 0;
+        if (title) title.innerHTML = '<i class="fas fa-ticket-alt"></i> Buat Voucher';
+        if (editInput) editInput.value = '';
+        if (codeInput) codeInput.value = '';
+        if (typeInput) typeInput.value = 'percent';
+        if (valueInput) valueInput.value = '';
+        if (maxUseInput) maxUseInput.value = '';
+        if (expiryInput) expiryInput.value = '';
+        if (minPurchaseInput) minPurchaseInput.value = 0;
     }
     modal.classList.add('active');
 }
@@ -3315,7 +3328,152 @@ window.exportReviews = exportReviews;
 window.changePassword = changePassword;
 
 // ============================================================
-// FITUR: PROMO SPESIAL — Aktif/Nonaktif dari Admin
+// FITUR ADMIN: FUNGSI YANG HILANG — DITAMBAHKAN KEMBALI
+// ============================================================
+
+async function showDailySummary() {
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch('/api/orders', { headers: { 'X-Admin-Token': token } });
+        const { orders } = await res.json();
+        const today = new Date().toISOString().split('T')[0];
+        const todayOrders = (orders || []).filter(o => o.createdAt?.startsWith(today));
+        const todayRevenue = todayOrders.reduce((s, o) => s + (o.total || 0), 0);
+        const completed = todayOrders.filter(o => o.status === 'completed').length;
+        const pending = todayOrders.filter(o => o.status === 'pending').length;
+
+        Swal.fire({
+            title: `📊 Ringkasan Hari Ini`,
+            html: `<div style="text-align:left;font-size:0.95rem;line-height:2;">
+                <p>💰 <strong>Revenue:</strong> ${Utils.formatRupiah(todayRevenue)}</p>
+                <p>🛒 <strong>Total Order:</strong> ${todayOrders.length}</p>
+                <p>✅ <strong>Selesai:</strong> ${completed}</p>
+                <p>⏳ <strong>Pending:</strong> ${pending}</p>
+                <p>📅 <strong>Tanggal:</strong> ${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+            </div>`,
+            icon: 'info', confirmButtonText: 'OK', background: '#1a1a2e', color: '#fff'
+        });
+    } catch (e) {
+        Swal.fire({ icon: 'error', title: 'Gagal', text: e.message, background: '#1a1a2e', color: '#fff' });
+    }
+}
+
+async function markAllPendingCompleted() {
+    const confirmed = await Swal.fire({
+        title: 'Tandai Semua Pending → Selesai?',
+        icon: 'question', showCancelButton: true,
+        confirmButtonText: 'Ya', cancelButtonText: 'Batal',
+        background: '#1a1a2e', color: '#fff'
+    });
+    if (!confirmed.isConfirmed) return;
+
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch('/api/orders?status=pending', { headers: { 'X-Admin-Token': token } });
+        const { orders } = await res.json();
+        if (!orders?.length) { Swal.fire({ icon: 'info', title: 'Tidak ada order pending', background: '#1a1a2e', color: '#fff' }); return; }
+
+        await Promise.all(orders.map(o =>
+            fetch(`/api/orders?id=${o._id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                body: JSON.stringify({ status: 'completed' })
+            })
+        ));
+        addActivityLog('Pesanan', `Tandai ${orders.length} order pending → selesai`);
+        renderOrdersTable(); updateStats();
+        Swal.fire({ icon: 'success', title: `${orders.length} order ditandai selesai!`, background: '#1a1a2e', color: '#fff', timer: 2000, showConfirmButton: false });
+    } catch (e) { Swal.fire({ icon: 'error', title: 'Gagal', text: e.message, background: '#1a1a2e', color: '#fff' }); }
+}
+
+async function globalSearch(query) {
+    if (!query || query.length < 2) return;
+    const token = AdminAuth.getToken();
+    const q = query.toLowerCase();
+    try {
+        const [orderRes, productRes] = await Promise.all([
+            fetch('/api/orders', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ orders: [] })),
+            fetch('/api/products', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ products: [] }))
+        ]);
+        const orders = (orderRes.orders || []).filter(o => o.orderId?.toLowerCase().includes(q) || o.userName?.toLowerCase().includes(q)).slice(0, 5);
+        const products = (productRes.products || []).filter(p => p.name?.toLowerCase().includes(q)).slice(0, 5);
+
+        if (!orders.length && !products.length) {
+            Swal.fire({ icon: 'info', title: 'Tidak ditemukan', text: `Tidak ada hasil untuk "${query}"`, background: '#1a1a2e', color: '#fff' }); return;
+        }
+        let html = '';
+        if (orders.length) {
+            html += `<h4 style="color:var(--primary);margin-bottom:8px;">📦 Pesanan</h4>`;
+            html += orders.map(o => `<div style="padding:8px;background:var(--bg-glass);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:0.85rem;" onclick="showSection('orders')">${o.orderId} — ${o.userName||'-'} — ${Utils.formatRupiah(o.total)}</div>`).join('');
+        }
+        if (products.length) {
+            html += `<h4 style="color:var(--accent);margin:12px 0 8px;">🛍️ Produk</h4>`;
+            html += products.map(p => `<div style="padding:8px;background:var(--bg-glass);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:0.85rem;" onclick="showSection('products')">${p.name} — ${Utils.formatRupiah(p.price)}</div>`).join('');
+        }
+        Swal.fire({ title: `Hasil: "${query}"`, html, background: '#1a1a2e', color: '#fff', confirmButtonText: 'Tutup' });
+    } catch {}
+}
+
+async function exportOrdersJSON() {
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch('/api/orders', { headers: { 'X-Admin-Token': token } });
+        const { orders } = await res.json();
+        if (!orders?.length) { Swal.fire({ icon: 'info', title: 'Kosong', background: '#1a1a2e', color: '#fff' }); return; }
+        const blob = new Blob([JSON.stringify(orders, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `pesanan-${new Date().toISOString().split('T')[0]}.json`;
+        a.click(); URL.revokeObjectURL(a.href);
+        addActivityLog('Export', `Export ${orders.length} pesanan ke JSON`);
+    } catch (e) { Swal.fire({ icon: 'error', title: 'Gagal', text: e.message, background: '#1a1a2e', color: '#fff' }); }
+}
+
+let _orderPollingInterval = null;
+async function startOrderPolling() {
+    if (_orderPollingInterval) return;
+    let _lastOrderCount = 0;
+    const token = AdminAuth.getToken();
+
+    async function checkNewOrders() {
+        try {
+            const res = await fetch('/api/orders', { headers: { 'X-Admin-Token': token } });
+            if (!res.ok) return;
+            const { orders } = await res.json();
+            const count = orders?.length || 0;
+            if (_lastOrderCount > 0 && count > _lastOrderCount) {
+                const newCount = count - _lastOrderCount;
+                if (typeof Utils !== 'undefined') Utils.showToast(`🛒 ${newCount} pesanan baru!`, 'success');
+                const ordersSection = document.getElementById('orders-section');
+                if (ordersSection?.style.display !== 'none') renderOrdersTable();
+                updateStats();
+            }
+            _lastOrderCount = count;
+        } catch {}
+    }
+    await checkNewOrders();
+    _orderPollingInterval = setInterval(checkNewOrders, 30000);
+}
+
+async function sendOrderNotifWA(orderId) {
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch('/api/orders', { headers: { 'X-Admin-Token': token } });
+        const { orders } = await res.json();
+        const order = orders?.find(o => o._id === orderId || o.orderId === orderId);
+        if (!order) { Swal.fire({ icon: 'error', title: 'Order tidak ditemukan', background: '#1a1a2e', color: '#fff' }); return; }
+        const msg = `Halo ${order.userName || 'Pelanggan'}! 👋\n\nPesanan kamu di ALFA HOSTING:\n📋 Order ID: ${order.orderId}\n💰 Total: ${Utils.formatRupiah(order.total)}\n✅ Status: ${order.status === 'completed' ? 'SELESAI' : 'DIPROSES'}\n\nTerima kasih! 🚀`;
+        window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+    } catch (e) { Swal.fire({ icon: 'error', title: 'Gagal', text: e.message, background: '#1a1a2e', color: '#fff' }); }
+}
+
+// Expose semua fungsi yang hilang
+window.showDailySummary = showDailySummary;
+window.markAllPendingCompleted = markAllPendingCompleted;
+window.globalSearch = globalSearch;
+window.exportOrdersJSON = exportOrdersJSON;
+window.startOrderPolling = startOrderPolling;
+window.sendOrderNotifWA = sendOrderNotifWA;
 // ============================================================
 async function loadPromoSettings() {
     const token = AdminAuth.getToken();

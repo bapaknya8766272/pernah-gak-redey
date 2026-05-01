@@ -457,7 +457,7 @@
                             <span id="discount-price">Rp 0</span>
                         </div>
                         <div class="summary-item promo-input">
-                            <input type="text" id="promo-code" placeholder="Kode promo...">
+                            <input type="text" id="promo-code" placeholder="Kode promo / referral...">
                             <button onclick="applyPromo()">Pakai</button>
                         </div>
                         <div class="summary-item total">
@@ -776,6 +776,55 @@
         <i class="fas fa-chevron-up"></i>
     </button>
 
+    <!-- ===== MODAL: LUPA PASSWORD USER ===== -->
+    <div id="forgot-password-modal" class="modal">
+        <div class="modal-content modal-sm">
+            <button class="modal-close" onclick="closeForgotPasswordModal()"><i class="fas fa-times"></i></button>
+            <div class="modal-header" style="text-align:center;">
+                <div style="width:60px;height:60px;background:var(--gradient-primary);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 15px;font-size:1.5rem;"><i class="fas fa-key"></i></div>
+                <h3 id="forgot-modal-title">Lupa Password</h3>
+                <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:5px;" id="forgot-modal-desc">Masukkan email kamu untuk mendapatkan kode reset password</p>
+            </div>
+            <div class="modal-body">
+                <!-- Step 1: Email -->
+                <div id="forgot-step-1">
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="forgot-email" placeholder="email@kamu.com">
+                    </div>
+                    <button class="btn btn-primary" style="width:100%;" onclick="requestPasswordReset()">
+                        <i class="fas fa-paper-plane"></i> Kirim Kode Reset
+                    </button>
+                </div>
+
+                <!-- Step 2: Token + Password Baru -->
+                <div id="forgot-step-2" style="display:none;">
+                    <div class="form-group">
+                        <label>Kode Reset</label>
+                        <input type="text" id="forgot-token" placeholder="Masukkan kode reset" style="font-family:monospace;letter-spacing:2px;">
+                        <small style="color:var(--text-muted);">Kode berlaku 1 jam</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Password Baru</label>
+                        <input type="password" id="forgot-new-password" placeholder="Min. 8 karakter">
+                    </div>
+                    <div class="form-group">
+                        <label>Konfirmasi Password</label>
+                        <input type="password" id="forgot-confirm-password" placeholder="Ulangi password baru">
+                    </div>
+                    <button class="btn btn-primary" style="width:100%;" onclick="submitPasswordReset()">
+                        <i class="fas fa-check"></i> Reset Password
+                    </button>
+                    <button onclick="document.getElementById('forgot-step-1').style.display='block';document.getElementById('forgot-step-2').style.display='none';" style="background:none;border:none;color:var(--text-muted);font-size:0.82rem;cursor:pointer;width:100%;margin-top:8px;font-family:inherit;">
+                        ← Kembali
+                    </button>
+                </div>
+
+                <p id="forgot-error" style="display:none;color:var(--danger);font-size:0.85rem;margin-top:10px;text-align:center;"></p>
+            </div>
+        </div>
+    </div>
+
     <!-- ===== AUTH: LOGIN / REGISTER MODAL ===== -->
     <div id="auth-modal" class="modal">
         <div class="modal-content modal-sm">
@@ -813,6 +862,12 @@
                     <button class="btn btn-primary" style="width:100%;" onclick="loginWithEmail()">
                         <i class="fas fa-sign-in-alt"></i> Masuk
                     </button>
+                    <div style="text-align:center;margin-top:10px;">
+                        <button onclick="openForgotPasswordModal()" style="background:none;border:none;color:var(--primary);font-size:0.82rem;cursor:pointer;font-family:inherit;text-decoration:underline;">
+                            Lupa password?
+                        </button>
+                    </div>
+                </div>
                 </div>
 
                 <!-- Form Register -->

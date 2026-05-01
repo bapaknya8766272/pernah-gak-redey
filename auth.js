@@ -528,3 +528,139 @@ window.filterTransactions = filterTransactions;
 window.loadTransactions = loadTransactions;
 window.saveTransactionToDB = saveTransactionToDB;
 window.AuthState = AuthState;
+
+// ============================================================
+// LUPA PASSWORD USER
+// ============================================================
+let _forgotEmail = '';
+
+function openForgotPasswordModal() {
+    // Tutup modal login dulu
+    closeAuthModal();
+    // Reset state
+    _forgotEmail = '';
+    document.getElementById('forgot-step-1').style.display = 'block';
+    document.getElementById('forgot-step-2').style.display = 'none';
+    const emailEl = document.getElementById('forgot-email');
+    const tokenEl = document.getElementById('forgot-token');
+    const newPassEl = document.getElementById('forgot-new-password');
+    const confEl = document.getElementById('forgot-confirm-password');
+    const errEl = document.getElementById('forgot-error');
+    if (emailEl) emailEl.value = '';
+    if (tokenEl) tokenEl.value = '';
+    if (newPassEl) newPassEl.value = '';
+    if (confEl) confEl.value = '';
+    if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+    document.getElementById('forgot-password-modal')?.classList.add('active');
+}
+
+function closeForgotPasswordModal() {
+    document.getElementById('forgot-password-modal')?.classList.remove('active');
+}
+
+async function requestPasswordReset() {
+    const email = document.getElementById('forgot-email')?.value?.trim();
+    const errEl = document.getElementById('forgot-error');
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        if (errEl) { errEl.textContent = 'Masukkan email yang valid'; errEl.style.display = 'block'; }
+        return;
+    }
+
+    const btn = document.querySelector('#forgot-step-1 .btn-primary');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...'; }
+
+    try {
+        const res = await fetch('/api/reset-password?action=request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            _forgotEmail = email;
+
+            // Tampilkan token langsung (karena tidak ada email server)
+            if (data.token) {
+                // Tampilkan token di UI untuk user copy
+                document.getElementById('forgot-step-1').style.display = 'none';
+                document.getElementById('forgot-step-2').style.display = 'block';
+
+                const tokenEl = document.getElementById('forgot-token');
+                if (tokenEl) tokenEl.value = data.token;
+
+                const descEl = document.getElementById('forgot-modal-desc');
+                if (descEl) descEl.textContent = `Kode reset untuk ${email} sudah dibuat. Masukkan password baru kamu.`;
+
+                if (errEl) {
+                    errEl.style.color = 'var(--accent)';
+                    errEl.textContent = '✅ Kode reset berhasil dibuat. Masukkan di kolom di atas.';
+                    errEl.style.display = 'block';
+                }
+            } else {
+                if (errEl) {
+                    errEl.style.color = 'var(--accent)';
+                    errEl.textContent = data.message || 'Jika email terdaftar, kode reset sudah dikirim.';
+                    errEl.style.display = 'block';
+                }
+            }
+        } else {
+            if (errEl) { errEl.style.color = 'var(--danger)'; errEl.textContent = data.error || 'Gagal memproses permintaan'; errEl.style.display = 'block'; }
+        }
+    } catch (err) {
+        if (errEl) { errEl.style.color = 'var(--danger)'; errEl.textContent = 'Gagal terhubung ke server'; errEl.style.display = 'block'; }
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Kirim Kode Reset'; }
+    }
+}
+
+async function submitPasswordReset() {
+    const token = document.getElementById('forgot-token')?.value?.trim();
+    const newPassword = document.getElementById('forgot-new-password')?.value;
+    const confirmPassword = document.getElementById('forgot-confirm-password')?.value;
+    const errEl = document.getElementById('forgot-error');
+
+    if (!token) { if (errEl) { errEl.style.color = 'var(--danger)'; errEl.textContent = 'Masukkan kode reset'; errEl.style.display = 'block'; } return; }
+    if (!newPassword || newPassword.length < 8) { if (errEl) { errEl.style.color = 'var(--danger)'; errEl.textContent = 'Password minimal 8 karakter'; errEl.style.display = 'block'; } return; }
+    if (newPassword !== confirmPassword) { if (errEl) { errEl.style.color = 'var(--danger)'; errEl.textContent = 'Password tidak cocok'; errEl.style.display = 'block'; } return; }
+
+    const btn = document.querySelector('#forgot-step-2 .btn-primary');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...'; }
+
+    try {
+        const res = await fetch('/api/reset-password?action=reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, email: _forgotEmail, newPassword })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            closeForgotPasswordModal();
+            // Tampilkan sukses dan buka modal login
+            setTimeout(() => {
+                openAuthModal();
+                switchAuthTab('login');
+                const loginEmail = document.getElementById('login-email');
+                if (loginEmail) loginEmail.value = _forgotEmail;
+            }, 300);
+
+            if (typeof Utils !== 'undefined') {
+                Utils.showToast('✅ Password berhasil direset! Silakan login dengan password baru.', 'success');
+            }
+        } else {
+            if (errEl) { errEl.style.color = 'var(--danger)'; errEl.textContent = data.error || 'Gagal reset password'; errEl.style.display = 'block'; }
+        }
+    } catch (err) {
+        if (errEl) { errEl.style.color = 'var(--danger)'; errEl.textContent = 'Gagal terhubung ke server'; errEl.style.display = 'block'; }
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Reset Password'; }
+    }
+}
+
+// Expose ke window
+window.openForgotPasswordModal = openForgotPasswordModal;
+window.closeForgotPasswordModal = closeForgotPasswordModal;
+window.requestPasswordReset = requestPasswordReset;
+window.submitPasswordReset = submitPasswordReset;
