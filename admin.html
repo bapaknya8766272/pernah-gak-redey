@@ -276,63 +276,53 @@
                                 <h3>Traffic Pengunjung</h3>
                                 <p class="dash-card-sub">Pengunjung baru vs kembali</p>
                             </div>
-                            <div style="display:flex;gap:12px;align-items:center;">
-                                <div class="legend-dot" style="background:#6366f1;"></div><span style="font-size:0.8rem;color:var(--text-secondary);">Pengunjung Baru</span>
+                            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                                <div class="legend-dot" style="background:#6366f1;"></div><span style="font-size:0.8rem;color:var(--text-secondary);">Baru</span>
                                 <div class="legend-dot" style="background:#10b981;"></div><span style="font-size:0.8rem;color:var(--text-secondary);">Kembali</span>
                                 <select id="traffic-period" onchange="updateTrafficChart()" class="dash-select">
                                     <option value="7">7 Hari</option>
                                     <option value="30">30 Hari</option>
-                                    <option value="90">3 Bulan</option>
                                 </select>
                             </div>
                         </div>
-                        <canvas id="trafficChart" height="200"></canvas>
+                        <canvas id="trafficChart" height="160"></canvas>
                     </div>
 
-                    <!-- Devices Donut (kanan atas, seperti referensi) -->
+                    <!-- Devices Donut -->
                     <div class="dash-card">
                         <div class="dash-card-header">
-                            <div>
-                                <h3>Perangkat</h3>
-                                <p class="dash-card-sub">Distribusi device pengunjung</p>
-                            </div>
+                            <div><h3>Perangkat</h3><p class="dash-card-sub">Distribusi device</p></div>
                             <span class="dash-badge">Hari ini</span>
                         </div>
-                        <div style="position:relative;height:160px;display:flex;align-items:center;justify-content:center;">
+                        <div style="position:relative;height:130px;display:flex;align-items:center;justify-content:center;">
                             <canvas id="deviceChart"></canvas>
                             <div style="position:absolute;text-align:center;">
-                                <div style="font-size:1.8rem;font-weight:800;" id="total-device-count">0</div>
-                                <div style="font-size:0.75rem;color:var(--text-muted);">Total</div>
+                                <div style="font-size:1.5rem;font-weight:800;" id="total-device-count">0</div>
+                                <div style="font-size:0.7rem;color:var(--text-muted);">Total</div>
                             </div>
                         </div>
-                        <div id="device-legend" style="margin-top:15px;display:flex;flex-direction:column;gap:8px;"></div>
+                        <div id="device-legend" style="margin-top:10px;display:flex;flex-direction:column;gap:6px;"></div>
                     </div>
 
                     <!-- Sales Chart -->
                     <div class="dash-card dash-card-wide">
                         <div class="dash-card-header">
-                            <div>
-                                <h3>Grafik Penjualan</h3>
-                                <p class="dash-card-sub">Revenue per periode</p>
-                            </div>
+                            <div><h3>Grafik Penjualan</h3><p class="dash-card-sub">Revenue per periode</p></div>
                             <select id="sales-period" onchange="updateSalesChart()" class="dash-select">
                                 <option value="7">7 Hari</option>
                                 <option value="30">30 Hari</option>
                                 <option value="90">3 Bulan</option>
                             </select>
                         </div>
-                        <canvas id="salesChart" height="200"></canvas>
+                        <canvas id="salesChart" height="160"></canvas>
                     </div>
 
                     <!-- Category Donut -->
                     <div class="dash-card">
                         <div class="dash-card-header">
-                            <div>
-                                <h3>Kategori Produk</h3>
-                                <p class="dash-card-sub">Penjualan per kategori</p>
-                            </div>
+                            <div><h3>Kategori</h3><p class="dash-card-sub">Penjualan per kategori</p></div>
                         </div>
-                        <canvas id="categoryChart" height="160"></canvas>
+                        <canvas id="categoryChart" height="130"></canvas>
                     </div>
                 </div>
 

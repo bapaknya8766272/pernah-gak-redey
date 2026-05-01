@@ -645,7 +645,12 @@ async function renderProductsTable(filter = '') {
 
     const categoryLabels = { vps: 'VPS', panel: 'Panel', other: 'Jasa' };
 
+    // Cache produk untuk akses cepat dari onclick
+    window._adminProductCache = {};
+    products.forEach(p => { window._adminProductCache[p.id || p._id] = p; });
+
     tbody.innerHTML = products.map(product => {
+        const pid = product.id || String(product._id);
         const stockClass = product.category === 'other' ? 'unlimited' :
             product.stock > 10 ? 'high' : product.stock > 5 ? 'medium' : 'low';
 
@@ -659,9 +664,9 @@ async function renderProductsTable(filter = '') {
                 <td>-</td>
                 <td>
                     <div class="action-btns">
-                        ${product.category !== 'other' ? `<button class="action-btn restock" onclick="openRestockModal('${product.id}')" title="Restock"><i class="fas fa-plus"></i></button>` : ''}
-                        <button class="action-btn edit" onclick="editProduct('${product.id}')" title="Edit"><i class="fas fa-edit"></i></button>
-                        <button class="action-btn delete" onclick="deleteProduct('${product.id}')" title="Hapus"><i class="fas fa-trash"></i></button>
+                        ${product.category !== 'other' ? `<button class="action-btn restock" onclick="openRestockModal('${pid}')" title="Restock"><i class="fas fa-plus"></i></button>` : ''}
+                        <button class="action-btn edit" onclick="editProduct('${pid}')" title="Edit"><i class="fas fa-edit"></i></button>
+                        <button class="action-btn delete" onclick="deleteProduct('${pid}')" title="Hapus"><i class="fas fa-trash"></i></button>
                     </div>
                 </td>
             </tr>`;
@@ -683,15 +688,12 @@ async function openProductModal(productId = null) {
     const title = document.getElementById('product-modal-title');
 
     if (productId) {
-        // Cari dari cache dulu, kalau tidak ada load dari DB
-        let product = ProductManager.getById(productId);
+        // Cari dari cache admin dulu
+        let product = window._adminProductCache?.[productId] || ProductManager.getById(productId);
         if (!product) {
             try {
                 const res = await fetch(`/api/products?id=${productId}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    product = data.product;
-                }
+                if (res.ok) product = (await res.json()).product;
             } catch {}
         }
         if (!product) return;
@@ -825,14 +827,15 @@ function resetProducts() {
 // RESTOCK
 // ========================================
 async function openRestockModal(productId) {
-    let product = ProductManager.getById(productId);
+    // Cari dari cache admin dulu (paling cepat)
+    let product = window._adminProductCache?.[productId] || ProductManager.getById(productId);
     if (!product) {
         try {
             const res = await fetch(`/api/products?id=${productId}`);
             if (res.ok) product = (await res.json()).product;
         } catch {}
     }
-    if (!product) return;
+    if (!product) { Utils.showToast ? Utils.showToast('Produk tidak ditemukan', 'error') : alert('Produk tidak ditemukan'); return; }
 
     document.getElementById('restock-product-id').value = productId;
     document.getElementById('restock-product-name').textContent = product.name;
@@ -1605,8 +1608,15 @@ function _patchLoginBtn() {
 // ========================================
 // FITUR 3: NOTIFIKASI STOK MENIPIS
 // ========================================
-function showLowStockAlert() {
-    const products = ProductManager.getAll();
+async function showLowStockAlert() {
+    // Load produk terbaru dari MongoDB
+    const token = AdminAuth.getToken();
+    let products = ProductManager.getAll();
+    try {
+        const res = await fetch('/api/products', { headers: { 'X-Admin-Token': token } });
+        if (res.ok) { const data = await res.json(); if (data.products?.length) products = data.products; }
+    } catch {}
+
     const lowStock = products.filter(p => p.category !== 'other' && p.stock <= 5 && p.stock > 0);
     const outOfStock = products.filter(p => p.category !== 'other' && p.stock === 0);
 
@@ -1621,7 +1631,7 @@ function showLowStockAlert() {
                 <span style="font-weight:600;">${p.name}</span>
                 <div style="display:flex;align-items:center;gap:10px;">
                     <span style="color:var(--danger);font-weight:700;">HABIS</span>
-                    <button class="action-btn restock" onclick="document.getElementById('low-stock-modal').classList.remove('active');openRestockModal('${p.id}')" title="Restock"><i class="fas fa-plus"></i></button>
+                    <button class="action-btn restock" onclick="document.getElementById('low-stock-modal').classList.remove('active');openRestockModal('${p.id || p._id}')" title="Restock"><i class="fas fa-plus"></i></button>
                 </div>
             </div>`).join('');
         html += '</div>';
@@ -1634,7 +1644,7 @@ function showLowStockAlert() {
                 <span style="font-weight:600;">${p.name}</span>
                 <div style="display:flex;align-items:center;gap:10px;">
                     <span style="color:var(--warning);font-weight:700;">Sisa: ${p.stock}</span>
-                    <button class="action-btn restock" onclick="document.getElementById('low-stock-modal').classList.remove('active');openRestockModal('${p.id}')" title="Restock"><i class="fas fa-plus"></i></button>
+                    <button class="action-btn restock" onclick="document.getElementById('low-stock-modal').classList.remove('active');openRestockModal('${p.id || p._id}')" title="Restock"><i class="fas fa-plus"></i></button>
                 </div>
             </div>`).join('');
         html += '</div>';
@@ -1645,8 +1655,14 @@ function showLowStockAlert() {
     document.getElementById('low-stock-modal').classList.add('active');
 }
 
-function updateLowStockHeaderBadge() {
-    const products = ProductManager.getAll();
+async function updateLowStockHeaderBadge() {
+    const token = AdminAuth.getToken();
+    let products = ProductManager.getAll();
+    try {
+        const res = await fetch('/api/products', { headers: { 'X-Admin-Token': token } });
+        if (res.ok) { const data = await res.json(); if (data.products?.length) products = data.products; }
+    } catch {}
+
     const count = products.filter(p => p.category !== 'other' && p.stock <= 5).length;
     const btn = document.getElementById('low-stock-alert-btn');
     const countEl = document.getElementById('low-stock-header-count');
@@ -1885,25 +1901,45 @@ window.clearActivityLog = clearActivityLog;
 // ============================================================
 // showSection sudah lengkap di atas — tidak perlu override lagi
 
-function renderVouchers() {
-    const vouchers = VoucherManager.getAll();
+async function renderVouchers() {
+    const token = AdminAuth.getToken();
+    let vouchers = [];
+
+    try {
+        const res = await fetch('/api/content?type=vouchers', { headers: { 'X-Admin-Token': token } });
+        if (res.ok) {
+            const data = await res.json();
+            vouchers = data.vouchers || [];
+            // Sync ke localStorage sebagai cache
+            localStorage.setItem('vouchers', JSON.stringify(vouchers));
+        }
+    } catch {
+        // Fallback ke localStorage
+        vouchers = JSON.parse(localStorage.getItem('vouchers') || '[]');
+    }
+
     const total = vouchers.length;
     const active = vouchers.filter(v => v.active).length;
     const used = vouchers.reduce((sum, v) => sum + (v.usedCount || 0), 0);
-    
-    document.getElementById('voucher-total').textContent = total;
-    document.getElementById('voucher-active').textContent = active;
-    document.getElementById('voucher-used').textContent = used;
-    
+
+    const totalEl = document.getElementById('voucher-total');
+    const activeEl = document.getElementById('voucher-active');
+    const usedEl = document.getElementById('voucher-used');
+    if (totalEl) totalEl.textContent = total;
+    if (activeEl) activeEl.textContent = active;
+    if (usedEl) usedEl.textContent = used;
+
     const badge = document.getElementById('voucher-badge');
-    if (badge) {
-        badge.textContent = total;
-        badge.style.display = total > 0 ? 'flex' : 'none';
-    }
-    
+    if (badge) { badge.textContent = total; badge.style.display = total > 0 ? 'flex' : 'none'; }
+
     const tbody = document.getElementById('vouchers-table-body');
     if (!tbody) return;
-    
+
+    if (vouchers.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);"><i class="fas fa-ticket-alt" style="font-size:2rem;display:block;margin-bottom:10px;opacity:0.3;"></i>Belum ada voucher</td></tr>`;
+        return;
+    }
+
     tbody.innerHTML = vouchers.map(v => `
         <tr>
             <td><strong style="letter-spacing:1px;">${v.code}</strong></td>
@@ -1918,8 +1954,7 @@ function renderVouchers() {
                 <button class="action-btn ${v.active ? 'inactive' : 'active'}" onclick="toggleVoucher('${v.id}')" title="${v.active ? 'Nonaktifkan' : 'Aktifkan'}"><i class="fas fa-power-off"></i></button>
                 <button class="action-btn delete" onclick="deleteVoucher('${v.id}')" title="Hapus"><i class="fas fa-trash"></i></button>
             </td>
-        </tr>
-    `).join('');
+        </tr>`).join('');
 }
 
 function openVoucherModal(editId = null) {
@@ -1934,7 +1969,8 @@ function openVoucherModal(editId = null) {
     const minPurchaseInput = document.getElementById('voucher-min-purchase');
     
     if (editId) {
-        const voucher = VoucherManager.getAll().find(v => v.id === editId);
+        const vouchers = JSON.parse(localStorage.getItem('vouchers') || '[]');
+        const voucher = vouchers.find(v => v.id === editId);
         if (voucher) {
             title.innerHTML = '<i class="fas fa-ticket-alt"></i> Edit Voucher';
             editInput.value = voucher.id;
@@ -1971,7 +2007,7 @@ function generateVoucherCode() {
     document.getElementById('voucher-code').value = code;
 }
 
-function saveVoucher() {
+async function saveVoucher() {
     const id = document.getElementById('voucher-edit-id').value;
     const code = document.getElementById('voucher-code').value.trim().toUpperCase();
     const type = document.getElementById('voucher-type').value;
@@ -1979,60 +2015,73 @@ function saveVoucher() {
     const maxUse = parseInt(document.getElementById('voucher-max-use').value) || 0;
     const expiry = document.getElementById('voucher-expiry').value;
     const minPurchase = parseInt(document.getElementById('voucher-min-purchase').value) || 0;
-    
+
     if (!code || !value) {
         Swal.fire({ icon: 'warning', title: 'Data tidak lengkap!', text: 'Isi kode dan nilai diskon.', background: '#1a1a2e', color: '#fff' });
         return;
     }
-    
-    const vouchers = VoucherManager.getAll();
-    if (id) {
-        // Edit existing
-        const idx = vouchers.findIndex(v => v.id === id);
-        if (idx !== -1) {
-            vouchers[idx] = { ...vouchers[idx], code, type, value, maxUse, expiry, minPurchase };
+
+    const token = AdminAuth.getToken();
+    try {
+        if (id) {
+            await fetch(`/api/content?type=vouchers&id=${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                body: JSON.stringify({ code, type, value, maxUse, expiry, minPurchase })
+            });
+        } else {
+            await fetch('/api/content?type=vouchers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                body: JSON.stringify({ code, type, value, maxUse, expiry, minPurchase, active: true })
+            });
         }
-    } else {
-        // Create new
-        const newVoucher = {
-            id: 'vch_' + Date.now().toString(36),
-            code,
-            type,
-            value,
-            maxUse,
-            expiry,
-            minPurchase,
-            usedCount: 0,
-            active: true,
-            created: new Date().toISOString()
-        };
-        vouchers.push(newVoucher);
+        closeVoucherModal();
+        renderVouchers();
+        addActivityLog('Voucher', id ? `Edit voucher ${code}` : `Buat voucher ${code}`);
+        Swal.fire({ icon: 'success', title: 'Berhasil!', text: 'Voucher disimpan ke database.', background: '#1a1a2e', color: '#fff', timer: 1000, showConfirmButton: false });
+    } catch (e) {
+        // Fallback ke localStorage
+        const vouchers = JSON.parse(localStorage.getItem('vouchers') || '[]');
+        if (id) {
+            const idx = vouchers.findIndex(v => v.id === id);
+            if (idx !== -1) vouchers[idx] = { ...vouchers[idx], code, type, value, maxUse, expiry, minPurchase };
+        } else {
+            vouchers.push({ id: 'vch_' + Date.now().toString(36), code, type, value, maxUse, expiry, minPurchase, usedCount: 0, active: true });
+        }
+        localStorage.setItem('vouchers', JSON.stringify(vouchers));
+        closeVoucherModal();
+        renderVouchers();
+        Swal.fire({ icon: 'success', title: 'Berhasil!', text: 'Voucher disimpan (lokal).', background: '#1a1a2e', color: '#fff', timer: 1000, showConfirmButton: false });
     }
-    
-    localStorage.setItem('vouchers', JSON.stringify(vouchers));
-    closeVoucherModal();
-    renderVouchers();
-    addActivityLog('Voucher', id ? `Edit voucher ${code}` : `Buat voucher ${code}`);
-    Swal.fire({ icon: 'success', title: 'Berhasil!', text: 'Voucher disimpan.', background: '#1a1a2e', color: '#fff', timer: 1000, showConfirmButton: false });
 }
 
 function editVoucher(id) {
     openVoucherModal(id);
 }
 
-function toggleVoucher(id) {
-    const vouchers = VoucherManager.getAll();
-    const idx = vouchers.findIndex(v => v.id === id);
-    if (idx !== -1) {
-        vouchers[idx].active = !vouchers[idx].active;
-        localStorage.setItem('vouchers', JSON.stringify(vouchers));
-        renderVouchers();
-        addActivityLog('Voucher', `${vouchers[idx].active ? 'Aktifkan' : 'Nonaktifkan'} voucher ${vouchers[idx].code}`);
-    }
+async function toggleVoucher(id) {
+    const token = AdminAuth.getToken();
+    const vouchers = JSON.parse(localStorage.getItem('vouchers') || '[]');
+    const v = vouchers.find(v => v.id === id);
+    const newActive = v ? !v.active : true;
+
+    try {
+        await fetch(`/api/content?type=vouchers&id=${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+            body: JSON.stringify({ active: newActive })
+        });
+    } catch {}
+
+    // Update localStorage juga
+    if (v) { v.active = newActive; localStorage.setItem('vouchers', JSON.stringify(vouchers)); }
+    renderVouchers();
+    addActivityLog('Voucher', `${newActive ? 'Aktifkan' : 'Nonaktifkan'} voucher ${v?.code || id}`);
 }
 
-function deleteVoucher(id) {
-    Swal.fire({
+async function deleteVoucher(id) {
+    const confirmed = await Swal.fire({
         title: 'Hapus Voucher?',
         text: 'Voucher yang dihapus tidak dapat dikembalikan.',
         icon: 'warning',
@@ -2040,18 +2089,24 @@ function deleteVoucher(id) {
         confirmButtonText: 'Ya, Hapus',
         cancelButtonText: 'Batal',
         background: '#1a1a2e',
-        color: '#fff'
-    }).then(result => {
-        if (result.isConfirmed) {
-            const vouchers = VoucherManager.getAll();
-            const voucher = vouchers.find(v => v.id === id);
-            const filtered = vouchers.filter(v => v.id !== id);
-            localStorage.setItem('vouchers', JSON.stringify(filtered));
-            renderVouchers();
-            addActivityLog('Voucher', `Hapus voucher ${voucher?.code || id}`);
-            Swal.fire({ icon: 'success', title: 'Terhapus!', text: 'Voucher dihapus.', background: '#1a1a2e', color: '#fff', timer: 1000, showConfirmButton: false });
-        }
+        color: '#fff',
+        confirmButtonColor: '#ef4444'
     });
+    if (!confirmed.isConfirmed) return;
+
+    const token = AdminAuth.getToken();
+    const vouchers = JSON.parse(localStorage.getItem('vouchers') || '[]');
+    const v = vouchers.find(v => v.id === id);
+
+    try {
+        await fetch(`/api/content?type=vouchers&id=${id}`, { method: 'DELETE', headers: { 'X-Admin-Token': token } });
+    } catch {}
+
+    // Update localStorage
+    localStorage.setItem('vouchers', JSON.stringify(vouchers.filter(v => v.id !== id)));
+    renderVouchers();
+    addActivityLog('Voucher', `Hapus voucher ${v?.code || id}`);
+    Swal.fire({ icon: 'success', title: 'Terhapus!', text: 'Voucher dihapus.', background: '#1a1a2e', color: '#fff', timer: 1000, showConfirmButton: false });
 }
 
 function filterVouchers() {
@@ -2066,22 +2121,38 @@ function filterVouchers() {
 // ============================================================
 // FITUR ADMIN 2: ADVANCED ANALYTICS
 // ============================================================
-function renderAnalytics() {
-    const salesHistory = JSON.parse(localStorage.getItem('salesHistory')) || [];
+async function renderAnalytics() {
+    const token = AdminAuth.getToken();
     const products = ProductManager.getAll();
-    const visitors = parseInt(localStorage.getItem('total_visits') || '0');
-    
+
+    // Load orders dari MongoDB
+    let orders = [];
+    try {
+        const res = await fetch('/api/orders', { headers: { 'X-Admin-Token': token } });
+        if (res.ok) { const data = await res.json(); orders = data.orders || []; }
+    } catch {}
+
+    // Load visitors dari MongoDB
+    let visitors = 0, visitorStats = {};
+    try {
+        const res = await fetch('/api/visitors', { headers: { 'X-Admin-Token': token } });
+        if (res.ok) { const data = await res.json(); visitors = data.stats?.total || 0; visitorStats = data.stats || {}; }
+    } catch {}
+
     // Average Order Value
-    const totalRevenue = salesHistory.reduce((sum, s) => sum + (s.price * s.quantity), 0);
-    const avgOrderValue = salesHistory.length > 0 ? Math.floor(totalRevenue / salesHistory.length) : 0;
-    document.getElementById('avg-order-value').textContent = Utils.formatRupiah(avgOrderValue);
-    
+    const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+    const avgOrderValue = orders.length > 0 ? Math.floor(totalRevenue / orders.length) : 0;
+    const avgEl = document.getElementById('avg-order-value');
+    if (avgEl) avgEl.textContent = Utils.formatRupiah(avgOrderValue);
+
     // Best Selling Product
     const productSales = {};
-    salesHistory.forEach(s => {
-        productSales[s.id] = (productSales[s.id] || 0) + s.quantity;
+    orders.forEach(o => {
+        (o.items || []).forEach(item => {
+            productSales[item.id] = (productSales[item.id] || 0) + (item.quantity || 1);
+        });
     });
-    let bestProduct = null, maxSales = 0;
+    let bestProduct = '-', maxSales = 0;
     for (const [id, qty] of Object.entries(productSales)) {
         if (qty > maxSales) {
             maxSales = qty;
@@ -2089,43 +2160,48 @@ function renderAnalytics() {
             bestProduct = p ? p.name : id;
         }
     }
-    document.getElementById('best-product-name').textContent = bestProduct || '-';
-    
-    // Conversion Rate (simulated)
-    const conversionRate = visitors > 0 ? Math.min(100, Math.round((salesHistory.length / visitors) * 100)) : 0;
-    document.getElementById('conversion-rate').textContent = conversionRate + '%';
-    
+    const bestEl = document.getElementById('best-product-name');
+    if (bestEl) bestEl.textContent = bestProduct;
+
+    // Conversion Rate
+    const conversionRate = visitors > 0 ? Math.min(100, Math.round((orders.length / visitors) * 100)) : 0;
+    const convEl = document.getElementById('conversion-rate');
+    if (convEl) convEl.textContent = conversionRate + '%';
+
     // Orders Today
     const today = new Date().toISOString().split('T')[0];
-    const ordersToday = salesHistory.filter(s => s.date && s.date.startsWith(today)).length;
-    document.getElementById('orders-today').textContent = ordersToday;
-    
+    const ordersToday = orders.filter(o => o.createdAt?.startsWith(today)).length;
+    const todayEl = document.getElementById('orders-today');
+    if (todayEl) todayEl.textContent = ordersToday;
+
     // Revenue Target
     const target = parseInt(localStorage.getItem('revenue_target') || '10000000');
     const progress = Math.min(100, Math.floor((totalRevenue / target) * 100));
-    document.getElementById('revenue-target-pct').textContent = progress + '%';
-    document.getElementById('revenue-target-text').textContent = `${Utils.formatRupiah(totalRevenue)} / ${Utils.formatRupiah(target)}`;
-    document.getElementById('revenue-target-bar').style.width = progress + '%';
-    
+    const pctEl = document.getElementById('revenue-target-pct');
+    const txtEl = document.getElementById('revenue-target-text');
+    const barEl = document.getElementById('revenue-target-bar');
+    if (pctEl) pctEl.textContent = progress + '%';
+    if (txtEl) txtEl.textContent = `${Utils.formatRupiah(totalRevenue)} / ${Utils.formatRupiah(target)}`;
+    if (barEl) barEl.style.width = progress + '%';
+
     // Top 5 Products
     const topProducts = Object.entries(productSales)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
+        .sort((a, b) => b[1] - a[1]).slice(0, 5)
         .map(([id, qty]) => {
             const p = products.find(p => p.id === id);
             return { name: p?.name || id, sales: qty };
         });
     const topList = document.getElementById('top-products-list');
     if (topList) {
-        topList.innerHTML = topProducts.map(p => `
+        topList.innerHTML = topProducts.length > 0 ? topProducts.map(p => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-color);">
                 <div style="display:flex;align-items:center;gap:10px;">
                     <div style="width:8px;height:8px;background:var(--primary);border-radius:50%;"></div>
                     <span style="font-size:0.9rem;">${Utils.sanitize(p.name)}</span>
                 </div>
                 <span style="font-weight:700;color:var(--accent);">${p.sales} terjual</span>
-            </div>
-        `).join('');
+            </div>`).join('')
+            : '<p style="color:var(--text-muted);text-align:center;padding:20px;">Belum ada data penjualan</p>';
     }
     
     // Hourly Chart — destroy dulu jika sudah ada

@@ -1901,3 +1901,75 @@ select option {
     .mini-stats-row { grid-template-columns: 1fr; }
     .mini-stat-value { font-size: 1.5rem; }
 }
+
+/* ── Dashboard Compact — tidak perlu scroll ─────────────────── */
+.dashboard-grid {
+    grid-template-columns: 2fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.dashboard-bottom {
+    grid-template-columns: 1fr 1fr 2fr;
+    gap: 12px;
+}
+
+.mini-stats-row {
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.mini-stat-card {
+    padding: 14px;
+}
+
+.mini-stat-value {
+    font-size: 1.5rem;
+    margin-bottom: 4px;
+}
+
+.mini-stat-chart {
+    height: 40px;
+    margin: 4px 0;
+}
+
+.dash-card {
+    padding: 14px;
+}
+
+.dash-card-header {
+    margin-bottom: 10px;
+}
+
+.dash-card-header h3 {
+    font-size: 0.88rem;
+}
+
+.dash-card-sub {
+    font-size: 0.72rem;
+}
+
+/* Realtime list lebih compact */
+.realtime-item {
+    padding: 8px 0;
+}
+
+.realtime-value {
+    font-size: 1rem;
+}
+
+/* Top pages compact */
+.top-page-item {
+    gap: 2px;
+}
+
+/* Responsive compact */
+@media (max-width: 1400px) {
+    .dashboard-grid { grid-template-columns: 1.5fr 1fr; }
+}
+
+@media (max-width: 1200px) {
+    .dashboard-grid { grid-template-columns: 1fr; }
+    .dashboard-bottom { grid-template-columns: 1fr 1fr; }
+    .dashboard-bottom .dash-card-wide { grid-column: 1 / -1; }
+}
