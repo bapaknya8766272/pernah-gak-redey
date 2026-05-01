@@ -183,6 +183,12 @@
                         <button class="btn btn-secondary btn-sm" onclick="refreshDashboard()" title="Refresh Data">
                             <i class="fas fa-sync-alt"></i>
                         </button>
+                        <button class="btn btn-secondary btn-sm" onclick="showDailySummary()" title="Ringkasan Hari Ini">
+                            <i class="fas fa-chart-bar"></i>
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="globalSearch(prompt('Cari di admin...'))" title="Search Global">
+                            <i class="fas fa-search"></i>
+                        </button>
                         <a href="index.html" target="_blank" class="btn btn-secondary btn-sm">
                             <i class="fas fa-external-link-alt"></i> Lihat Website
                         </a>
@@ -463,11 +469,14 @@
                         </select>
                     </div>
                     <div class="toolbar-actions">
-                        <button class="btn btn-secondary" onclick="exportOrders()">
+                        <button class="btn btn-secondary" onclick="exportOrdersJSON()">
                             <i class="fas fa-download"></i> Export JSON
                         </button>
                         <button class="btn btn-accent" onclick="exportOrdersCSV()" style="background:var(--accent);color:white;">
                             <i class="fas fa-file-csv"></i> Export CSV
+                        </button>
+                        <button class="btn btn-warning" onclick="markAllPendingCompleted()" style="background:var(--warning);color:#000;">
+                            <i class="fas fa-check-double"></i> Selesaikan Semua
                         </button>
                         <button class="btn btn-danger" onclick="clearAllOrders()">
                             <i class="fas fa-trash"></i> Hapus Semua

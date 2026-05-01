@@ -1355,6 +1355,19 @@ const QRISPayment = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Admin-Token': typeof AdminAuth !== 'undefined' ? AdminAuth.getToken() : '' },
             body: JSON.stringify({ orderId, items: cart, total, discount, promoCode: activePromo?.code || null, status: 'pending', ...userInfo })
+        }).then(async (res) => {
+            // Kirim notifikasi WhatsApp ke admin setelah order tersimpan
+            if (res.ok) {
+                const adminWA = localStorage.getItem('admin_wa') || '6282226769163';
+                const itemNames = cart.map(i => `${i.name} x${i.quantity}`).join(', ');
+                const msg = `🛒 *ORDER BARU!*\n\n📋 Order ID: ${orderId}\n💰 Total: ${Utils.formatRupiah(total)}\n📦 Produk: ${itemNames}\n${userInfo.userName ? `👤 Pembeli: ${userInfo.userName}` : ''}\n\nSegera proses pesanan ini!`;
+                // Buka WA di background (tidak ganggu user)
+                const waUrl = `https://wa.me/${adminWA}?text=${encodeURIComponent(msg)}`;
+                // Simpan notif pending untuk admin
+                const notifs = JSON.parse(localStorage.getItem('pending_notifs') || '[]');
+                notifs.push({ orderId, total, items: itemNames, time: new Date().toISOString(), waUrl });
+                localStorage.setItem('pending_notifs', JSON.stringify(notifs.slice(-20)));
+            }
         }).catch(() => {});
 
         // Simpan ke transaksi user jika login
@@ -2907,3 +2920,153 @@ document.addEventListener('DOMContentLoaded', () => {
         fabItems.appendChild(trackBtn);
     }
 });
+
+// ============================================================
+// FITUR BARU 1: NOTIFIKASI ADMIN — tampilkan di dashboard
+// ============================================================
+function checkPendingNotifications() {
+    const notifs = JSON.parse(localStorage.getItem('pending_notifs') || '[]');
+    if (notifs.length === 0) return;
+
+    // Tampilkan badge notifikasi di header
+    const badge = document.getElementById('notif-badge');
+    if (badge) { badge.textContent = notifs.length; badge.style.display = 'flex'; }
+}
+
+// Cek notif saat halaman load
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(checkPendingNotifications, 2000);
+});
+
+window.checkPendingNotifications = checkPendingNotifications;
+
+// ============================================================
+// FITUR BARU 2: ORDER TRACKING — cek status order by ID
+// ============================================================
+function trackOrder() {
+    const orderId = prompt('Masukkan Order ID kamu (contoh: HJBS-xxx-xxx):');
+    if (!orderId) return;
+
+    // Cek dari riwayat transaksi user (jika login)
+    if (typeof AuthState !== 'undefined' && AuthState.isLoggedIn()) {
+        const txns = AuthState.transactions || [];
+        const found = txns.find(t => t.orderId === orderId.trim().toUpperCase());
+        if (found) {
+            const statusMap = { pending: '⏳ Menunggu Pembayaran', completed: '✅ Selesai', cancelled: '❌ Dibatalkan' };
+            Swal.fire({
+                title: `Order ${found.orderId}`,
+                html: `
+                    <div style="text-align:left;font-size:0.9rem;">
+                        <p><strong>Status:</strong> ${statusMap[found.status] || found.status}</p>
+                        <p><strong>Total:</strong> ${Utils.formatRupiah(found.total)}</p>
+                        <p><strong>Tanggal:</strong> ${new Date(found.createdAt).toLocaleDateString('id-ID')}</p>
+                        <p><strong>Produk:</strong> ${found.items?.map(i => i.name).join(', ') || '-'}</p>
+                    </div>`,
+                icon: found.status === 'completed' ? 'success' : 'info',
+                confirmButtonText: 'OK',
+                background: '#1a1a2e',
+                color: '#fff'
+            });
+            return;
+        }
+    }
+
+    // Fallback: arahkan ke WhatsApp
+    const msg = `Halo, saya ingin cek status order ${orderId.trim().toUpperCase()}`;
+    window.open(`https://wa.me/6282226769163?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+window.trackOrder = trackOrder;
+
+// ============================================================
+// FITUR BARU 3: CETAK INVOICE / STRUK PEMBELIAN
+// ============================================================
+function printInvoice(orderId, items, total, discount) {
+    const date = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    const itemRows = (items || CartManager.getItems()).map(i =>
+        `<tr><td>${i.name}</td><td style="text-align:center">${i.quantity}</td><td style="text-align:right">${Utils.formatRupiah(i.price)}</td><td style="text-align:right">${Utils.formatRupiah(i.price * i.quantity)}</td></tr>`
+    ).join('');
+
+    const win = window.open('', '_blank');
+    win.document.write(`
+    <!DOCTYPE html><html><head><title>Invoice ${orderId}</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 20px auto; color: #333; }
+        h1 { color: #6366f1; } table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th { background: #6366f1; color: white; padding: 10px; }
+        td { padding: 8px; border-bottom: 1px solid #eee; }
+        .total { font-size: 1.2rem; font-weight: bold; color: #6366f1; }
+        .footer { margin-top: 30px; text-align: center; color: #888; font-size: 0.85rem; }
+        @media print { button { display: none; } }
+    </style></head><body>
+    <h1>🚀 ALFA HOSTING</h1>
+    <p>Invoice #${orderId || 'N/A'} | Tanggal: ${date}</p>
+    <hr>
+    <table>
+        <thead><tr><th>Produk</th><th>Qty</th><th>Harga</th><th>Subtotal</th></tr></thead>
+        <tbody>${itemRows}</tbody>
+    </table>
+    ${discount > 0 ? `<p>Diskon: -${Utils.formatRupiah(discount)}</p>` : ''}
+    <p class="total">Total: ${Utils.formatRupiah(total || CartManager.getTotal())}</p>
+    <hr>
+    <div class="footer">
+        <p>ALFA HOSTING | WhatsApp: +62 822-2676-9163 | alfaofficial.my.id</p>
+        <p>Terima kasih telah berbelanja!</p>
+    </div>
+    <br><button onclick="window.print()" style="background:#6366f1;color:white;padding:10px 20px;border:none;border-radius:8px;cursor:pointer;font-size:1rem;">🖨️ Print Invoice</button>
+    </body></html>`);
+    win.document.close();
+}
+
+window.printInvoice = printInvoice;
+
+// ============================================================
+// FITUR BARU 4: DARK/LIGHT MODE TOGGLE ANIMASI
+// ============================================================
+function toggleThemeAnimated() {
+    const body = document.body;
+    body.style.transition = 'background 0.4s ease, color 0.4s ease';
+    body.classList.toggle('light-mode');
+    const isLight = body.classList.contains('light-mode');
+    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+    const btn = document.getElementById('theme-btn');
+    if (btn) btn.innerHTML = isLight ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+    setTimeout(() => { body.style.transition = ''; }, 500);
+}
+
+// ============================================================
+// FITUR BARU 5: SHARE PRODUK KE SOSMED
+// ============================================================
+function shareProduct(productId, platform) {
+    const product = ProductManager.getById(productId);
+    if (!product) return;
+
+    const url = `${window.location.origin}${window.location.pathname}?product=${productId}`;
+    const text = `Cek ${product.name} di ALFA HOSTING — hanya ${Utils.formatRupiah(product.price)}/bulan! 🚀`;
+
+    const shareUrls = {
+        wa: `https://wa.me/?text=${encodeURIComponent(text + '\n' + url)}`,
+        twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`,
+        fb: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,
+        copy: null
+    };
+
+    if (platform === 'copy') {
+        navigator.clipboard.writeText(url).then(() => Utils.showToast('Link disalin! 🔗'));
+        return;
+    }
+
+    if (shareUrls[platform]) window.open(shareUrls[platform], '_blank');
+}
+
+window.shareProduct = shareProduct;
+
+// ============================================================
+// FITUR BARU 6: KONFIRMASI PEMBAYARAN MANUAL VIA WA
+// ============================================================
+function confirmPaymentWA(orderId, total) {
+    const msg = `Halo Admin ALFA HOSTING! 👋\n\nSaya sudah melakukan pembayaran:\n📋 Order ID: ${orderId}\n💰 Total: ${Utils.formatRupiah(total)}\n\nMohon segera diproses. Terima kasih! 🙏`;
+    window.open(`https://wa.me/6282226769163?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+window.confirmPaymentWA = confirmPaymentWA;

@@ -385,7 +385,7 @@ async function loadTransactions(page = 1, filter = 'all') {
     listEl.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);"><i class="fas fa-spinner fa-spin" style="font-size:2rem;"></i><p style="margin-top:10px;">Memuat transaksi...</p></div>`;
 
     try {
-        let url = `/api/transactions?page=${page}&limit=10`;
+        let url = `/api/account?type=transactions&page=${page}&limit=10`;
         if (filter !== 'all') url += `&status=${filter}`;
 
         const { ok, data } = await authFetch(url);
