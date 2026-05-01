@@ -1794,14 +1794,6 @@ async function clearActivityLog() {
     Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Log dihapus dari database!', background: '#1a1a2e', color: '#fff', timer: 1200, showConfirmButton: false });
 }
 
-// Patch showSection to render activity log
-const _origShowSection = showSection;
-window._origShowSection = _origShowSection;
-window.showSection = function(name) {
-    _origShowSection(name);
-    if (name === 'changelog') renderActivityLog();
-};
-
 // Patch initDashboard to update badge and log login
 const _origInitDashboard = initDashboard;
 window._origInitDashboard = _origInitDashboard;
@@ -1856,7 +1848,6 @@ window.clearCartFromAdmin = clearCartFromAdmin;
 window.filterActivityLog = filterActivityLog;
 window.exportActivityLog = exportActivityLog;
 window.clearActivityLog = clearActivityLog;
-window.showSection = showSection;
 
 
 // ============================================================
@@ -1866,40 +1857,7 @@ window.showSection = showSection;
 // ============================================================
 // FITUR ADMIN 1: VOUCHER MANAGEMENT
 // ============================================================
-function showSection(name) {
-    // Hide all sections
-    document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    
-    // Show selected section
-    const section = document.getElementById(name + '-section');
-    const navItem = document.querySelector(`[data-section="${name}"]`);
-    if (section) section.classList.add('active');
-    if (navItem) navItem.classList.add('active');
-    
-    // Update page title
-    const title = document.getElementById('page-title');
-    if (title) {
-        const titles = {
-            dashboard: 'Dashboard',
-            products: 'Produk & Stok',
-            orders: 'Pesanan',
-            testimonials: 'Testimoni',
-            customers: 'Pelanggan',
-            settings: 'Pengaturan',
-            changelog: 'Log Aktivitas',
-            vouchers: 'Voucher',
-            analytics: 'Analitik',
-            broadcast: 'Broadcast'
-        };
-        title.textContent = titles[name] || name;
-    }
-    
-    // Load section data
-    if (name === 'vouchers') renderVouchers();
-    if (name === 'analytics') renderAnalytics();
-    if (name === 'broadcast') renderBroadcast();
-}
+// showSection sudah lengkap di atas — tidak perlu override lagi
 
 function renderVouchers() {
     const vouchers = VoucherManager.getAll();
@@ -3528,24 +3486,6 @@ function exportReviews() {
 }
 
 // ============================================================
-// PATCH showSection — tambah section baru
-// ============================================================
-const _origShowSectionV3 = showSection;
-showSection = function(sectionName) {
-    _origShowSectionV3(sectionName);
-    const extraTitles = { newsletter:'Newsletter Subscribers', 'flash-sale':'Flash Sale Manager', reviews:'Manajemen Ulasan' };
-    if (extraTitles[sectionName]) {
-        const pageTitle = document.getElementById('page-title');
-        if (pageTitle) pageTitle.textContent = extraTitles[sectionName];
-    }
-    switch(sectionName) {
-        case 'newsletter': renderNewsletter(); break;
-        case 'flash-sale': initFlashSaleSection(); break;
-        case 'reviews': document.getElementById('reviews-stats').innerHTML = ''; renderReviews(); break;
-    }
-};
-
-// ============================================================
 // EXPOSE SEMUA FUNGSI ADMIN BARU
 // ============================================================
 window.renderNewsletter = renderNewsletter;
@@ -3555,21 +3495,8 @@ window.exportNewsletter = exportNewsletter;
 window.clearNewsletter = clearNewsletter;
 window.startFlashSale = startFlashSale;
 window.stopFlashSale = stopFlashSale;
-window.renderFlashSaleStatus = renderFlashSaleStatus;
 window.renderReviews = renderReviews;
 window.filterReviews = filterReviews;
 window.approveReview = approveReview;
 window.deleteReview = deleteReview;
 window.exportReviews = exportReviews;
-
-// Update initDashboard untuk cek badge newsletter & reviews
-const _origInitDashboardV3 = initDashboard;
-initDashboard = function() {
-    _origInitDashboardV3();
-    const subs = JSON.parse(localStorage.getItem('newsletter_subscribers') || '[]');
-    const badge = document.getElementById('newsletter-badge');
-    if (badge) { badge.textContent = subs.length; badge.style.display = subs.length > 0 ? 'flex' : 'none'; }
-    const pending = JSON.parse(localStorage.getItem('product_reviews') || '[]').filter(r => !r.approved).length;
-    const rbadge = document.getElementById('reviews-badge');
-    if (rbadge) { rbadge.textContent = pending; rbadge.style.display = pending > 0 ? 'flex' : 'none'; }
-};
