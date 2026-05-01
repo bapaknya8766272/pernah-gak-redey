@@ -250,6 +250,39 @@ export default async function handler(req, res) {
             });
         }
 
+        // ── POST check-username (untuk lupa password) ────────
+        if (action === 'check-username') {
+            const { username } = req.body;
+            if (!username) return res.status(400).json({ error: 'Username diperlukan' });
+            const admins = await getCollection('admins');
+            const admin = await admins.findOne({ username: username.toLowerCase().trim() });
+            return res.status(200).json({ exists: !!admin });
+        }
+
+        // ── POST reset-password (tanpa auth, hanya jika ada username) ─
+        if (action === 'reset-password') {
+            const { username, newPassword } = req.body;
+            if (!username || !newPassword) return res.status(400).json({ error: 'username dan newPassword diperlukan' });
+            if (newPassword.length < 12) return res.status(400).json({ error: 'Password minimal 12 karakter' });
+
+            const strength = checkPasswordStrength(newPassword);
+            if (strength.score < 3) return res.status(400).json({ error: 'Password terlalu lemah: ' + strength.feedback });
+
+            const admins = await getCollection('admins');
+            const admin = await admins.findOne({ username: username.toLowerCase().trim() });
+            if (!admin) return res.status(404).json({ error: 'Admin tidak ditemukan' });
+
+            const { hash, salt } = hashPassword(newPassword);
+            await admins.updateOne({ _id: admin._id }, { $set: { passwordHash: hash, passwordSalt: salt, updatedAt: new Date() } });
+
+            // Hapus semua session
+            const sessions = await getCollection('admin_sessions');
+            await sessions.deleteMany({ username: admin.username });
+
+            await auditLog('password_reset', ip, { username: admin.username });
+            return res.status(200).json({ success: true, message: 'Password berhasil direset. Silakan login dengan password baru.' });
+        }
+
         // ── POST logout ───────────────────────────────────────
         if (action === 'logout') {
             const token = req.headers['x-admin-token'];
