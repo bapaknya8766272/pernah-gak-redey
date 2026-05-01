@@ -328,54 +328,36 @@
 
                 <!-- Bottom Row: Real-time + Top Pages + Recent Orders -->
                 <div class="dashboard-bottom">
-                    <!-- Real-time Data (seperti referensi) -->
+                    <!-- Real-time Data -->
                     <div class="dash-card realtime-card">
                         <div class="dash-card-header">
-                            <div>
-                                <h3>Data Real-time</h3>
-                                <p class="dash-card-sub">Update setiap 30 detik</p>
-                            </div>
+                            <div><h3>Real-time</h3><p class="dash-card-sub">Update 30 detik</p></div>
                             <span class="live-badge"><span class="live-dot"></span> LIVE</span>
                         </div>
                         <div class="realtime-list">
                             <div class="realtime-item">
-                                <span class="realtime-label">Online sekarang</span>
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    <span class="realtime-value" id="rt-online">0</span>
-                                    <span class="realtime-max" id="rt-online-max">maks 0</span>
-                                </div>
+                                <span class="realtime-label">Online</span>
+                                <span class="realtime-value" id="rt-online">0</span>
                             </div>
                             <div class="realtime-item">
                                 <span class="realtime-label">Pengunjung baru</span>
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    <span class="realtime-value" id="rt-new">0</span>
-                                    <span class="realtime-max" id="rt-new-max">maks 0</span>
-                                </div>
+                                <span class="realtime-value" id="rt-new">0</span>
                             </div>
                             <div class="realtime-item">
-                                <span class="realtime-label">Pesanan hari ini</span>
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    <span class="realtime-value" id="rt-orders">0</span>
-                                    <span class="realtime-max" id="rt-orders-max">maks 0</span>
-                                </div>
+                                <span class="realtime-label">Order hari ini</span>
+                                <span class="realtime-value" id="rt-orders">0</span>
                             </div>
                             <div class="realtime-item">
-                                <span class="realtime-label">Halaman dilihat</span>
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    <span class="realtime-value" id="rt-pageviews">0</span>
-                                    <span class="realtime-max" id="rt-pageviews-max">maks 0</span>
-                                </div>
+                                <span class="realtime-label">Total pageviews</span>
+                                <span class="realtime-value" id="rt-pageviews">0</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Top Pages (seperti referensi) -->
+                    <!-- Top Pages -->
                     <div class="dash-card">
                         <div class="dash-card-header">
-                            <div>
-                                <h3>Halaman Populer</h3>
-                                <p class="dash-card-sub">Bulan ini</p>
-                            </div>
+                            <div><h3>Halaman Populer</h3><p class="dash-card-sub">Bulan ini</p></div>
                         </div>
                         <div id="top-pages-list" class="top-pages-list"></div>
                     </div>
@@ -383,10 +365,7 @@
                     <!-- Recent Orders -->
                     <div class="dash-card dash-card-wide">
                         <div class="dash-card-header">
-                            <div>
-                                <h3>Pesanan Terbaru</h3>
-                                <p class="dash-card-sub">5 pesanan terakhir</p>
-                            </div>
+                            <div><h3>Pesanan Terbaru</h3><p class="dash-card-sub">5 pesanan terakhir</p></div>
                             <button class="dash-link" onclick="showSection('orders')">Lihat semua →</button>
                         </div>
                         <div class="table-container" style="margin:0;">
