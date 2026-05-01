@@ -79,9 +79,14 @@ export default async function handler(req, res) {
         if (req.method === 'GET') {
             const page = parseInt(req.query.page) || 1;
             const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+            const statusFilter = req.query.status;
+
+            const query = { userId: user._id };
+            if (statusFilter && statusFilter !== 'all') query.status = statusFilter;
+
             const [data, total] = await Promise.all([
-                transactions.find({ userId: user._id }).sort({ createdAt: -1 }).skip((page-1)*limit).limit(limit).toArray(),
-                transactions.countDocuments({ userId: user._id })
+                transactions.find(query).sort({ createdAt: -1 }).skip((page-1)*limit).limit(limit).toArray(),
+                transactions.countDocuments(query)
             ]);
             return res.status(200).json({ transactions: data, pagination: { page, limit, total, pages: Math.ceil(total/limit) } });
         }

@@ -58,9 +58,9 @@ async function getSetting(key) {
     }
 }
 
-// Rate limiter sederhana
+// Rate limiter — lebih longgar untuk cek status yang berulang
 const ipMap = new Map();
-function checkRate(ip, max = 10, windowMs = 60000) {
+function checkRate(ip, max = 60, windowMs = 60000) {
     const now = Date.now();
     if (!ipMap.has(ip)) ipMap.set(ip, []);
     const times = ipMap.get(ip).filter(t => now - t < windowMs);
