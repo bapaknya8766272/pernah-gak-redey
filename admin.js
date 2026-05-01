@@ -2126,15 +2126,18 @@ function renderAnalytics() {
         `).join('');
     }
     
-    // Hourly Chart
+    // Hourly Chart — destroy dulu jika sudah ada
     const hourlyCtx = document.getElementById('hourlyChart');
     if (hourlyCtx) {
+        // Destroy chart lama jika ada
+        const existingChart = Chart.getChart(hourlyCtx);
+        if (existingChart) existingChart.destroy();
+
         const now = new Date();
         const labels = [];
         const data = [];
         for (let i = 0; i < 24; i++) {
             labels.push(`${i}:00`);
-            // Simulate sales data (peak at 14:00-16:00)
             const peak = i >= 14 && i <= 16 ? 1.5 : i >= 9 && i <= 20 ? 1 : 0.3;
             data.push(Math.floor(Math.random() * 5 * peak) + 1);
         }
@@ -2422,7 +2425,11 @@ function generatePDFReport(type) {
 function initRealTimeChart() {
     const ctx = document.getElementById('realtimeChart');
     if (!ctx) return;
-    
+
+    // Destroy chart lama jika ada
+    const existing = Chart.getChart(ctx);
+    if (existing) existing.destroy();
+
     const chart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -2815,6 +2822,9 @@ function initSparklines() {
     sparkConfigs.forEach(({ id, color }) => {
         const ctx = document.getElementById(id);
         if (!ctx) return;
+        // Destroy chart lama jika ada
+        const existing = Chart.getChart(ctx);
+        if (existing) existing.destroy();
         sparklineCharts[id] = new Chart(ctx, {
             type: 'line',
             data: {

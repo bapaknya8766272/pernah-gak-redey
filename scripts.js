@@ -617,7 +617,7 @@ const TestimonialManager = {
 
     async loadFromDB() {
         try {
-            const res = await fetch('/api/content?type=testimonials?limit=50');
+            const res = await fetch('/api/content?type=testimonials&limit=50');
             if (!res.ok) throw new Error('API error');
             const data = await res.json();
             this._cache = data.testimonials || [];
