@@ -381,6 +381,8 @@ function initDashboard() {
     startOrderPolling();
     // Pastikan tab overview aktif dengan class yang benar
     switchDashTab('overview');
+    // Load fitur dashboard baru
+    setTimeout(loadNewDashboardFeatures, 800);
 }
 
 async function initProductsDB() {
@@ -1813,10 +1815,9 @@ async function clearActivityLog() {
 }
 
 // Patch initDashboard to update badge and log login
-const _origInitDashboard = initDashboard;
-window._origInitDashboard = _origInitDashboard;
+window._origInitDashboard = initDashboard;
 window.initDashboard = function() {
-    _origInitDashboard();
+    window._origInitDashboard();
     updateLowStockHeaderBadge();
     addActivityLog('Login', 'Admin berhasil login ke dashboard');
 };
@@ -3455,9 +3456,14 @@ async function startOrderPolling() {
             if (_lastOrderCount > 0 && count > _lastOrderCount) {
                 const newCount = count - _lastOrderCount;
                 if (typeof Utils !== 'undefined') Utils.showToast(`🛒 ${newCount} pesanan baru!`, 'success');
+                // Tambah ke notif panel
+                if (typeof AdminNotif !== 'undefined') {
+                    AdminNotif.add('order', `${newCount} pesanan baru masuk!`);
+                }
                 const ordersSection = document.getElementById('orders-section');
                 if (ordersSection?.style.display !== 'none') renderOrdersTable();
                 updateStats();
+                loadKanbanBoard();
             }
             _lastOrderCount = count;
         } catch {}
@@ -4229,3 +4235,224 @@ window.filterIdentityTable = filterIdentityTable;
 window.filterSecurityLog = filterSecurityLog;
 window.exportInactiveCustomers = exportInactiveCustomers;
 window.updateExposureChart = updateExposureChart;
+
+// ============================================================
+// 5 FITUR BARU ADMIN DASHBOARD v4.1
+// ============================================================
+
+// ── FITUR ADMIN 1: Revenue Target ────────────────────────────
+async function loadRevenueTarget() {
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch('/api/orders', { headers: { 'X-Admin-Token': token } });
+        const { orders = [] } = await res.json().catch(() => ({ orders: [] }));
+
+        const now = new Date();
+        const thisMonth = now.getMonth();
+        const thisYear = now.getFullYear();
+
+        const monthOrders = orders.filter(o => {
+            const d = new Date(o.createdAt);
+            return d.getMonth() === thisMonth && d.getFullYear() === thisYear && o.status === 'completed';
+        });
+
+        const revenue = monthOrders.reduce((s, o) => s + (o.total || 0), 0);
+        const target = parseInt(localStorage.getItem('revenue_target') || '1000000');
+        const pct = Math.min(100, Math.round((revenue / target) * 100));
+
+        // Hari tersisa di bulan ini
+        const lastDay = new Date(thisYear, thisMonth + 1, 0).getDate();
+        const daysLeft = lastDay - now.getDate();
+
+        const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        const barEl = document.getElementById('revenue-target-bar');
+        const pctEl = document.getElementById('revenue-target-pct');
+
+        if (barEl) barEl.style.width = pct + '%';
+        if (pctEl) { pctEl.textContent = pct + '%'; pctEl.style.color = pct >= 100 ? 'var(--accent)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)'; }
+        setEl('revenue-target-text', `${Utils.formatRupiah(revenue)} / ${Utils.formatRupiah(target)}`);
+        setEl('revenue-target-days', `${daysLeft} hari tersisa`);
+    } catch {}
+}
+
+// ── FITUR ADMIN 2: Kanban Board ───────────────────────────────
+async function loadKanbanBoard() {
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch('/api/orders?limit=30', { headers: { 'X-Admin-Token': token } });
+        const { orders = [] } = await res.json().catch(() => ({ orders: [] }));
+
+        const groups = { pending: [], completed: [], cancelled: [] };
+        orders.forEach(o => {
+            const s = o.status || 'pending';
+            if (groups[s]) groups[s].push(o);
+        });
+
+        const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        setEl('kanban-pending-count', groups.pending.length);
+        setEl('kanban-completed-count', groups.completed.length);
+        setEl('kanban-cancelled-count', groups.cancelled.length);
+
+        const renderCol = (colId, items) => {
+            const el = document.getElementById(colId);
+            if (!el) return;
+            if (!items.length) {
+                el.innerHTML = `<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:0.75rem;opacity:0.5;">Tidak ada pesanan</div>`;
+                return;
+            }
+            el.innerHTML = items.slice(0, 5).map(o => {
+                const oid = (o.orderId || o._id || '').toString().slice(-8);
+                const name = o.items?.[0]?.name || 'Produk';
+                return `<div class="kanban-item" onclick="copyOrderId('${o.orderId || o._id}')">
+                    <div class="k-id">#${oid}</div>
+                    <div class="k-name">${Utils.sanitize(name)}</div>
+                    <div class="k-price">${Utils.formatRupiah(o.total || 0)}</div>
+                </div>`;
+            }).join('');
+        };
+
+        renderCol('kanban-pending', groups.pending);
+        renderCol('kanban-completed', groups.completed);
+        renderCol('kanban-cancelled', groups.cancelled);
+    } catch {}
+}
+
+// ── FITUR ADMIN 3: Server Status Monitor ─────────────────────
+async function loadServerStatus() {
+    const container = document.getElementById('server-status-grid');
+    if (!container) return;
+
+    const servers = [
+        { name: 'Website', url: '/api/settings?type=qris-public', key: 'website' },
+        { name: 'API Orders', url: '/api/orders?limit=1', key: 'orders', auth: true },
+        { name: 'MongoDB', url: '/api/visitors', key: 'db' },
+        { name: 'QRIS Gateway', url: '/api/qris?action=ping', key: 'qris' },
+    ];
+
+    const token = AdminAuth.getToken();
+
+    container.innerHTML = servers.map(s => `
+        <div class="server-status-item" id="srv-${s.key}">
+            <div class="server-status-dot warning"></div>
+            <div class="server-status-name">${s.name}</div>
+            <div class="server-status-ping">Mengecek...</div>
+            <div class="server-status-uptime">—</div>
+        </div>`).join('');
+
+    for (const srv of servers) {
+        const el = document.getElementById(`srv-${srv.key}`);
+        if (!el) continue;
+        const dot = el.querySelector('.server-status-dot');
+        const pingEl = el.querySelector('.server-status-ping');
+        const uptimeEl = el.querySelector('.server-status-uptime');
+
+        try {
+            const start = Date.now();
+            const headers = srv.auth ? { 'X-Admin-Token': token } : {};
+            const res = await fetch(srv.url, { headers, signal: AbortSignal.timeout(5000) });
+            const ms = Date.now() - start;
+
+            if (res.ok || res.status === 409) {
+                dot.className = 'server-status-dot online';
+                pingEl.textContent = `${ms}ms`;
+                uptimeEl.textContent = '99.9%';
+            } else {
+                dot.className = 'server-status-dot warning';
+                pingEl.textContent = `${res.status}`;
+                uptimeEl.textContent = 'Degraded';
+            }
+        } catch {
+            dot.className = 'server-status-dot offline';
+            pingEl.textContent = 'Timeout';
+            uptimeEl.textContent = 'Offline';
+        }
+    }
+}
+
+// ── FITUR ADMIN 4: Notifikasi Panel ──────────────────────────
+const AdminNotif = {
+    items: [],
+
+    add(type, title, time = new Date()) {
+        this.items.unshift({ type, title, time, read: false });
+        if (this.items.length > 20) this.items.pop();
+        this.updateBadge();
+        this.render();
+    },
+
+    updateBadge() {
+        const unread = this.items.filter(n => !n.read).length;
+        const badge = document.getElementById('notif-count-badge');
+        if (badge) {
+            badge.textContent = unread;
+            badge.style.display = unread > 0 ? 'flex' : 'none';
+        }
+    },
+
+    render() {
+        const list = document.getElementById('notif-list');
+        if (!list) return;
+        if (!this.items.length) {
+            list.innerHTML = `<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:0.85rem;"><i class="fas fa-bell-slash" style="font-size:1.5rem;display:block;margin-bottom:8px;opacity:0.3;"></i>Tidak ada notifikasi</div>`;
+            return;
+        }
+        const icons = { order: 'fa-shopping-bag', stock: 'fa-exclamation-triangle', user: 'fa-user', system: 'fa-cog' };
+        list.innerHTML = this.items.map((n, i) => `
+            <div class="notif-item ${n.read ? '' : 'unread'}" onclick="AdminNotif.markRead(${i})">
+                <div class="notif-icon ${n.type}"><i class="fas ${icons[n.type] || 'fa-bell'}"></i></div>
+                <div class="notif-content">
+                    <div class="notif-title">${Utils.sanitize(n.title)}</div>
+                    <div class="notif-time">${new Date(n.time).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}</div>
+                </div>
+            </div>`).join('');
+    },
+
+    markRead(idx) {
+        if (this.items[idx]) this.items[idx].read = true;
+        this.updateBadge();
+        this.render();
+    },
+
+    markAllRead() {
+        this.items.forEach(n => n.read = true);
+        this.updateBadge();
+        this.render();
+    }
+};
+
+function toggleNotifPanel() {
+    const panel = document.getElementById('notif-panel');
+    if (!panel) return;
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open')) {
+        AdminNotif.markAllRead();
+    }
+}
+
+// ── FITUR ADMIN 5: Quick Action Bar update ───────────────────
+function updateQuickActionBar() {
+    const el = document.getElementById('dash-last-update-2');
+    if (el) el.textContent = 'Update ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+// Patch initDashboard untuk load fitur baru
+// Override sudah dilakukan di initDashboard langsung — tambahkan load di sini
+function loadNewDashboardFeatures() {
+    loadRevenueTarget();
+    loadKanbanBoard();
+    loadServerStatus();
+    updateQuickActionBar();
+    setInterval(updateQuickActionBar, 1000);
+    setInterval(loadKanbanBoard, 60000);
+    setInterval(loadServerStatus, 120000);
+
+    // Tambah notif awal
+    AdminNotif.add('system', 'Admin dashboard dimuat', new Date());
+}
+
+// Expose
+window.toggleNotifPanel = toggleNotifPanel;
+window.loadRevenueTarget = loadRevenueTarget;
+window.loadKanbanBoard = loadKanbanBoard;
+window.loadServerStatus = loadServerStatus;
+window.AdminNotif = AdminNotif;

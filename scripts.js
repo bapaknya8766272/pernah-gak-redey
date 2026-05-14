@@ -3082,3 +3082,161 @@ function confirmPaymentWA(orderId, total) {
 }
 
 window.confirmPaymentWA = confirmPaymentWA;
+
+// ============================================================
+// 5 FITUR BARU WEBSITE v4.1
+// ============================================================
+
+// ── FITUR WEBSITE 1: Price Calculator ────────────────────────
+function openPriceCalculator() {
+    const products = ProductManager.getAll();
+    const options = products.map(p => `<option value="${p.id}" data-price="${p.price}">${Utils.sanitize(p.name)} — ${Utils.formatRupiah(p.price)}</option>`).join('');
+
+    Swal.fire({
+        title: '<i class="fas fa-calculator" style="color:#7c3aed;margin-right:8px;"></i>Kalkulator Harga',
+        html: `
+            <div style="text-align:left;">
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:0.85rem;color:#9b8ec4;display:block;margin-bottom:6px;">Pilih Layanan</label>
+                    <select id="calc-product" onchange="calcUpdatePrice()" style="width:100%;background:#130f2e;border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:10px;color:#f0eeff;font-family:inherit;">
+                        <option value="">-- Pilih --</option>
+                        ${options}
+                    </select>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:0.85rem;color:#9b8ec4;display:block;margin-bottom:6px;">Durasi (bulan)</label>
+                    <input type="number" id="calc-months" value="1" min="1" max="24" oninput="calcUpdatePrice()" style="width:100%;background:#130f2e;border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:10px;color:#f0eeff;font-family:inherit;">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:0.85rem;color:#9b8ec4;display:block;margin-bottom:6px;">Kode Promo (opsional)</label>
+                    <input type="text" id="calc-promo" placeholder="ALFA20" oninput="calcUpdatePrice()" style="width:100%;background:#130f2e;border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:10px;color:#f0eeff;font-family:inherit;text-transform:uppercase;">
+                </div>
+                <div id="calc-result" style="background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);border-radius:10px;padding:14px;margin-top:8px;display:none;">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:0.85rem;color:#9b8ec4;">
+                        <span>Harga per bulan</span><span id="calc-unit">Rp 0</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:0.85rem;color:#9b8ec4;">
+                        <span>Durasi</span><span id="calc-dur">1 bulan</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:0.85rem;color:#ef4444;" id="calc-disc-row" style="display:none;">
+                        <span>Diskon</span><span id="calc-disc">-Rp 0</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:1.1rem;font-weight:800;color:#10b981;border-top:1px solid rgba(124,58,237,0.2);padding-top:8px;margin-top:4px;">
+                        <span>Total</span><span id="calc-total">Rp 0</span>
+                    </div>
+                </div>
+            </div>`,
+        background: '#0d0b24',
+        color: '#f0eeff',
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-cart-plus"></i> Tambah ke Keranjang',
+        cancelButtonText: 'Tutup',
+        confirmButtonColor: '#7c3aed',
+        didOpen: () => { window.calcUpdatePrice = calcUpdatePrice; }
+    }).then(result => {
+        if (result.isConfirmed) {
+            const sel = document.getElementById('calc-product');
+            if (!sel?.value) return;
+            const product = ProductManager.getById(sel.value);
+            if (product) CartManager.addItem(product, 1);
+        }
+    });
+}
+
+function calcUpdatePrice() {
+    const sel = document.getElementById('calc-product');
+    const months = parseInt(document.getElementById('calc-months')?.value || '1');
+    const promoCode = (document.getElementById('calc-promo')?.value || '').toUpperCase().trim();
+    const result = document.getElementById('calc-result');
+
+    if (!sel?.value || !result) return;
+
+    const price = parseInt(sel.options[sel.selectedIndex]?.dataset.price || '0');
+    if (!price) return;
+
+    const subtotal = price * months;
+    const PROMO_CODES = { 'ALFA20': 0.20, 'NEWUSER': 0.15, 'HEMAT10': 0.10 };
+    const discPct = PROMO_CODES[promoCode] || 0;
+    const disc = Math.round(subtotal * discPct);
+    const total = subtotal - disc;
+
+    result.style.display = 'block';
+    const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    setEl('calc-unit', Utils.formatRupiah(price));
+    setEl('calc-dur', months + ' bulan');
+    setEl('calc-disc', '-' + Utils.formatRupiah(disc));
+    setEl('calc-total', Utils.formatRupiah(total));
+
+    const discRow = document.getElementById('calc-disc-row');
+    if (discRow) discRow.style.display = disc > 0 ? 'flex' : 'none';
+}
+
+window.openPriceCalculator = openPriceCalculator;
+window.calcUpdatePrice = calcUpdatePrice;
+
+// ── FITUR WEBSITE 2: Scroll Progress Bar (sudah ada, pastikan aktif) ──
+// Sudah diimplementasi di atas (window.addEventListener scroll)
+
+// ── FITUR WEBSITE 3: Social Proof Notif (sudah ada) ──────────
+// Sudah diimplementasi di atas (showSocialProof)
+
+// ── FITUR WEBSITE 4: Quick View (sudah ada) ──────────────────
+// Sudah diimplementasi di atas (openQuickView)
+
+// ── FITUR WEBSITE 5: Compare Produk (sudah ada) ──────────────
+// Sudah diimplementasi di atas (toggleCompare)
+
+// ── FITUR WEBSITE BARU: Tombol Kalkulator di Cart ────────────
+// Tambahkan tombol kalkulator di cart sidebar
+function addCalcButtonToCart() {
+    const sidebar = document.getElementById('cart-sidebar');
+    if (!sidebar || document.getElementById('calc-cart-btn')) return;
+    const btn = document.createElement('button');
+    btn.id = 'calc-cart-btn';
+    btn.className = 'btn btn-outline btn-full';
+    btn.style.cssText = 'margin-top:8px;font-size:0.82rem;';
+    btn.innerHTML = '<i class="fas fa-calculator"></i> Kalkulator Harga';
+    btn.onclick = openPriceCalculator;
+    sidebar.querySelector('.summary-card')?.appendChild(btn);
+}
+
+// Panggil saat cart dirender
+const _origRenderCart = typeof renderCart === 'function' ? renderCart : null;
+
+// ── FITUR WEBSITE BARU: Floating "Beli Sekarang" sticky button ──
+function initStickyBuyBtn() {
+    const btn = document.createElement('div');
+    btn.id = 'sticky-buy-btn';
+    btn.style.cssText = `
+        position: fixed; bottom: 80px; right: 20px;
+        z-index: 800; display: none;
+        flex-direction: column; gap: 8px; align-items: flex-end;
+    `;
+    btn.innerHTML = `
+        <button onclick="openPriceCalculator()" style="
+            background: linear-gradient(135deg,#7c3aed,#a855f7);
+            color: white; border: none; border-radius: 50px;
+            padding: 10px 18px; font-size: 0.82rem; font-weight: 700;
+            cursor: pointer; box-shadow: 0 4px 20px rgba(124,58,237,0.5);
+            display: flex; align-items: center; gap: 6px;
+            font-family: inherit; white-space: nowrap;
+            transition: all 0.2s;
+        " onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
+            <i class="fas fa-calculator"></i> Hitung Harga
+        </button>`;
+    document.body.appendChild(btn);
+
+    // Tampilkan setelah scroll 300px
+    window.addEventListener('scroll', () => {
+        const el = document.getElementById('sticky-buy-btn');
+        if (el) el.style.display = window.scrollY > 300 ? 'flex' : 'none';
+    }, { passive: true });
+}
+
+// Init saat DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+    initStickyBuyBtn();
+    setTimeout(addCalcButtonToCart, 2000);
+});
+
+window.initStickyBuyBtn = initStickyBuyBtn;

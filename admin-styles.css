@@ -1842,14 +1842,16 @@ select option {
 .dashboard-grid {
     display: grid;
     grid-template-columns: 2fr 1fr;
-    gap: 16px;
-    margin-bottom: 20px;
+    gap: 14px;
+    margin-bottom: 14px;
+    align-items: start;
 }
 
 .dashboard-bottom {
     display: grid;
     grid-template-columns: 1fr 1fr 2fr;
-    gap: 16px;
+    gap: 14px;
+    align-items: start;
 }
 
 /* ── Dash Card ────────────────────────── */
@@ -1857,35 +1859,49 @@ select option {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
-    padding: 20px;
+    padding: 16px 18px;
     transition: var(--transition);
+    /* KRITIS: cegah card stretch tak terbatas */
+    min-height: 0;
+    overflow: hidden;
 }
 
 .dash-card:hover {
-    border-color: rgba(99, 102, 241, 0.3);
+    border-color: rgba(124, 58, 237, 0.3);
 }
 
 .dash-card-wide {
-    /* spans full width in its grid area — no extra styles needed */
     position: relative;
+    min-height: 0;
+}
+
+/* KRITIS: batasi tinggi canvas chart */
+.dash-card canvas {
+    max-height: 160px !important;
+    width: 100% !important;
+}
+
+/* Sparkline canvas lebih kecil */
+.mini-stat-chart canvas {
+    max-height: 44px !important;
 }
 
 .dash-card-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
 }
 
 .dash-card-header h3 {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 2px;
 }
 
 .dash-card-sub {
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     color: var(--text-muted);
 }
 
@@ -1893,31 +1909,33 @@ select option {
     background: var(--bg-glass) !important;
     border: 1px solid var(--border-color) !important;
     border-radius: 8px;
-    padding: 6px 12px;
+    padding: 5px 10px;
     color: var(--text-secondary) !important;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     cursor: pointer;
     outline: none;
 }
 
 .dash-badge {
-    background: rgba(99, 102, 241, 0.1);
-    color: var(--primary);
-    padding: 4px 10px;
+    background: rgba(124, 58, 237, 0.1);
+    color: var(--primary-light);
+    padding: 3px 9px;
     border-radius: 20px;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 600;
-    border: 1px solid rgba(99, 102, 241, 0.2);
+    border: 1px solid rgba(124, 58, 237, 0.2);
+    white-space: nowrap;
 }
 
 .dash-link {
     background: none;
     border: none;
     color: var(--primary);
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     cursor: pointer;
     font-family: inherit;
     padding: 0;
+    white-space: nowrap;
     transition: var(--transition);
 }
 
@@ -2925,4 +2943,501 @@ select option {
 
 @media (max-width: 400px) {
     .mini-stats-row { grid-template-columns: 1fr; }
+}
+
+
+/* ============================================================
+   FIX KRITIS v4.1 — Dashboard tidak memanjang ke bawah
+   Override semua definisi sebelumnya
+   ============================================================ */
+
+/* Paksa semua canvas di dashboard punya max-height */
+#dashboard-section canvas,
+#dash-tab-overview canvas {
+    max-height: 160px !important;
+}
+
+#dashboard-section .mini-stat-chart canvas,
+#dash-tab-overview .mini-stat-chart canvas {
+    max-height: 44px !important;
+}
+
+/* Dashboard grid — align-items: start agar tidak stretch */
+#dash-tab-overview .dashboard-grid {
+    display: grid !important;
+    grid-template-columns: 2fr 1fr !important;
+    gap: 12px !important;
+    margin-bottom: 12px !important;
+    align-items: start !important;
+}
+
+#dash-tab-overview .dashboard-bottom {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr 2fr !important;
+    gap: 12px !important;
+    align-items: start !important;
+}
+
+/* Mini stats row — compact */
+#dash-tab-overview .mini-stats-row {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 10px !important;
+    margin-bottom: 12px !important;
+}
+
+/* Dash card — jangan stretch */
+#dash-tab-overview .dash-card {
+    padding: 14px 16px !important;
+    overflow: hidden !important;
+    min-height: 0 !important;
+}
+
+/* Realtime list — compact */
+.realtime-item {
+    padding: 8px 0 !important;
+}
+
+/* Top pages list — compact */
+.top-pages-list {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+}
+
+/* Recent orders table — compact */
+#dash-tab-overview .data-table th,
+#dash-tab-overview .data-table td {
+    padding: 8px 12px !important;
+    font-size: 0.82rem !important;
+}
+
+/* Responsive fix */
+@media (max-width: 1200px) {
+    #dash-tab-overview .dashboard-grid { grid-template-columns: 1fr !important; }
+    #dash-tab-overview .dashboard-bottom { grid-template-columns: 1fr 1fr !important; }
+    #dash-tab-overview .dashboard-bottom .dash-card-wide { grid-column: 1 / -1 !important; }
+    #dash-tab-overview .mini-stats-row { grid-template-columns: repeat(2, 1fr) !important; }
+}
+
+@media (max-width: 768px) {
+    #dash-tab-overview .dashboard-bottom { grid-template-columns: 1fr !important; }
+    #dash-tab-overview .mini-stats-row { grid-template-columns: repeat(2, 1fr) !important; }
+}
+
+/* ── 5 FITUR BARU ADMIN DASHBOARD ─────────────────────────── */
+
+/* 1. Quick Action Bar */
+.quick-action-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    align-items: center;
+}
+
+.quick-action-bar .qa-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 4px;
+}
+
+.qa-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    background: var(--bg-glass);
+    color: var(--text-secondary);
+    transition: var(--transition);
+    font-family: inherit;
+    white-space: nowrap;
+}
+
+.qa-btn:hover { background: rgba(124,58,237,0.12); color: var(--primary-light); border-color: var(--primary); }
+.qa-btn.danger:hover { background: rgba(239,68,68,0.12); color: var(--danger); border-color: var(--danger); }
+.qa-btn.success:hover { background: rgba(16,185,129,0.12); color: var(--accent); border-color: var(--accent); }
+
+/* 2. Revenue Target Card */
+.revenue-target-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 12px;
+}
+
+.revenue-target-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.revenue-target-title { font-size: 0.85rem; font-weight: 700; }
+.revenue-target-pct { font-size: 1.1rem; font-weight: 800; color: var(--accent); }
+
+.revenue-target-track {
+    height: 8px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 6px;
+}
+
+.revenue-target-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #7c3aed, #10b981);
+    transition: width 1s ease;
+}
+
+.revenue-target-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+/* 3. Notifikasi Panel */
+.notif-panel {
+    position: fixed;
+    top: 60px;
+    right: 20px;
+    width: 320px;
+    background: rgba(13,11,36,0.98);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+    z-index: 500;
+    display: none;
+    backdrop-filter: blur(20px);
+    overflow: hidden;
+}
+
+.notif-panel.open { display: block; animation: modalIn 0.2s ease; }
+
+.notif-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    background: rgba(124,58,237,0.06);
+}
+
+.notif-panel-header h4 { font-size: 0.88rem; font-weight: 700; }
+
+.notif-list { max-height: 320px; overflow-y: auto; }
+
+.notif-item {
+    display: flex;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(124,58,237,0.06);
+    transition: var(--transition);
+    cursor: pointer;
+}
+
+.notif-item:hover { background: rgba(124,58,237,0.06); }
+.notif-item.unread { background: rgba(124,58,237,0.04); }
+
+.notif-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+}
+
+.notif-icon.order { background: rgba(16,185,129,0.15); color: var(--accent); }
+.notif-icon.stock { background: rgba(245,158,11,0.15); color: var(--warning); }
+.notif-icon.user { background: rgba(124,58,237,0.15); color: var(--primary-light); }
+.notif-icon.system { background: rgba(59,130,246,0.15); color: #60a5fa; }
+
+.notif-content .notif-title { font-size: 0.82rem; font-weight: 600; margin-bottom: 2px; }
+.notif-content .notif-time { font-size: 0.7rem; color: var(--text-muted); }
+
+.notif-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 16px;
+    height: 16px;
+    background: var(--danger);
+    border-radius: 50%;
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 4. Order Status Kanban */
+.kanban-board {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.kanban-col {
+    background: rgba(124,58,237,0.04);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 12px;
+    min-height: 120px;
+}
+
+.kanban-col-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.kanban-col-title { font-size: 0.8rem; font-weight: 700; }
+.kanban-count { font-size: 0.72rem; font-weight: 700; padding: 2px 7px; border-radius: 10px; }
+.kanban-count.pending { background: rgba(245,158,11,0.15); color: var(--warning); }
+.kanban-count.completed { background: rgba(16,185,129,0.15); color: var(--accent); }
+.kanban-count.cancelled { background: rgba(239,68,68,0.15); color: var(--danger); }
+
+.kanban-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.kanban-item:hover { border-color: var(--primary); transform: translateY(-1px); }
+.kanban-item .k-id { color: var(--text-muted); font-size: 0.68rem; margin-bottom: 2px; }
+.kanban-item .k-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kanban-item .k-price { color: var(--accent); font-weight: 700; font-size: 0.72rem; margin-top: 2px; }
+
+/* 5. Server Status Monitor */
+.server-status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.server-status-item {
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px 12px;
+    text-align: center;
+    transition: var(--transition);
+}
+
+.server-status-item:hover { border-color: var(--border-glow); }
+
+.server-status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin: 0 auto 6px;
+}
+
+.server-status-dot.online { background: var(--accent); box-shadow: 0 0 8px rgba(16,185,129,0.5); animation: livePulse 2s infinite; }
+.server-status-dot.offline { background: var(--danger); }
+.server-status-dot.warning { background: var(--warning); }
+
+.server-status-name { font-size: 0.72rem; font-weight: 600; margin-bottom: 2px; }
+.server-status-ping { font-size: 0.65rem; color: var(--text-muted); }
+.server-status-uptime { font-size: 0.68rem; color: var(--accent); font-weight: 600; }
+
+/* ── 5 FITUR BARU WEBSITE (CSS) ───────────────────────────── */
+
+/* 1. Compare Bar */
+.compare-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(13,11,36,0.97);
+    border-top: 1px solid var(--border-color);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 900;
+    backdrop-filter: blur(20px);
+    flex-wrap: wrap;
+    box-shadow: 0 -4px 30px rgba(0,0,0,0.5);
+}
+
+.compare-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(124,58,237,0.15);
+    border: 1px solid rgba(124,58,237,0.3);
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--primary-light);
+}
+
+.compare-tag button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0;
+    transition: var(--transition);
+}
+
+.compare-tag button:hover { color: var(--danger); }
+
+/* 2. Price Calculator */
+.price-calc-widget {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.price-calc-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.price-calc-title i { color: var(--primary); }
+
+.price-calc-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.price-calc-result {
+    background: rgba(124,58,237,0.08);
+    border: 1px solid rgba(124,58,237,0.2);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-top: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.price-calc-total { font-size: 1.3rem; font-weight: 800; color: var(--accent); }
+
+/* 3. Floating Notif Toast (website) */
+.site-notif {
+    position: fixed;
+    bottom: 80px;
+    left: 20px;
+    background: rgba(13,11,36,0.97);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85rem;
+    z-index: 800;
+    backdrop-filter: blur(20px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    animation: toastIn 0.3s ease;
+    max-width: 300px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.site-notif:hover { transform: translateY(-2px); }
+.site-notif .sn-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--gradient-primary); display: flex; align-items: center; justify-content: center; font-size: 0.9rem; flex-shrink: 0; }
+.site-notif .sn-text .sn-title { font-weight: 700; font-size: 0.82rem; }
+.site-notif .sn-text .sn-sub { font-size: 0.72rem; color: var(--text-muted); }
+
+/* 4. Product Quick View */
+.quick-view-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(8px);
+    z-index: 950;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.quick-view-overlay.active { display: flex; animation: fadeIn 0.2s ease; }
+
+.quick-view-card {
+    background: rgba(13,11,36,0.98);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    max-width: 480px;
+    width: 100%;
+    position: relative;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.8);
+}
+
+.quick-view-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 30px;
+    height: 30px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    transition: var(--transition);
+}
+
+.quick-view-close:hover { background: var(--danger); color: white; border-color: var(--danger); }
+
+/* 5. Scroll Progress Bar */
+.scroll-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    background: var(--gradient-primary);
+    z-index: 9999;
+    transition: width 0.1s linear;
+    box-shadow: 0 0 10px rgba(124,58,237,0.6);
 }

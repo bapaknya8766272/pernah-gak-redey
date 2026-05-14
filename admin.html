@@ -179,6 +179,11 @@
                             <i class="fas fa-exclamation-triangle" style="color:var(--warning)"></i>
                             <span id="low-stock-header-count">0</span>
                         </button>
+                        <!-- Tombol Notifikasi (FITUR ADMIN BARU 5) -->
+                        <button class="btn btn-secondary btn-sm" onclick="toggleNotifPanel()" title="Notifikasi" style="position:relative;">
+                            <i class="fas fa-bell"></i>
+                            <span id="notif-count-badge" class="notif-badge" style="display:none;">0</span>
+                        </button>
                         <button class="btn btn-secondary btn-sm" onclick="toggleMaintenanceMode()" id="maintenance-btn" title="Mode Maintenance">
                             <i class="fas fa-tools"></i>
                         </button>
@@ -238,6 +243,36 @@
 
                 <!-- ===== TAB: OVERVIEW ===== -->
                 <div id="dash-tab-overview">
+
+                    <!-- Quick Action Bar (FITUR ADMIN BARU 1) -->
+                    <div class="quick-action-bar">
+                        <span class="qa-label"><i class="fas fa-bolt"></i> Aksi Cepat:</span>
+                        <button class="qa-btn" onclick="openProductModal()"><i class="fas fa-plus"></i> Produk Baru</button>
+                        <button class="qa-btn" onclick="showSection('orders')"><i class="fas fa-shopping-bag"></i> Lihat Pesanan</button>
+                        <button class="qa-btn success" onclick="markAllPendingCompleted()"><i class="fas fa-check-double"></i> Selesaikan Pending</button>
+                        <button class="qa-btn" onclick="exportOrdersCSV()"><i class="fas fa-file-csv"></i> Export CSV</button>
+                        <button class="qa-btn" onclick="showDailySummary()"><i class="fas fa-chart-bar"></i> Ringkasan Hari Ini</button>
+                        <button class="qa-btn danger" onclick="toggleMaintenanceMode()"><i class="fas fa-tools"></i> Maintenance</button>
+                        <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+                            <span style="font-size:0.72rem;color:var(--text-muted);" id="dash-last-update-2">—</span>
+                        </div>
+                    </div>
+
+                    <!-- Revenue Target (FITUR ADMIN BARU 2) -->
+                    <div class="revenue-target-card">
+                        <div class="revenue-target-header">
+                            <span class="revenue-target-title"><i class="fas fa-bullseye" style="color:var(--primary);margin-right:6px;"></i> Target Pendapatan Bulan Ini</span>
+                            <span class="revenue-target-pct" id="revenue-target-pct">0%</span>
+                        </div>
+                        <div class="revenue-target-track">
+                            <div class="revenue-target-fill" id="revenue-target-bar" style="width:0%;"></div>
+                        </div>
+                        <div class="revenue-target-info">
+                            <span id="revenue-target-text">Rp 0 / Rp 1.000.000</span>
+                            <span id="revenue-target-days" style="color:var(--accent);">— hari tersisa</span>
+                        </div>
+                    </div>
+
                     <div class="mini-stats-row">
                         <div class="mini-stat-card">
                             <div class="mini-stat-header"><span class="mini-stat-label">Total Pendapatan</span><span class="mini-stat-period">Bulan ini</span></div>
@@ -323,6 +358,61 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Kanban Order Status (FITUR ADMIN BARU 3) -->
+                    <div class="dash-card" style="margin-top:12px;">
+                        <div class="dash-card-header">
+                            <div><h3><i class="fas fa-columns" style="color:var(--primary);margin-right:6px;"></i>Status Pesanan — Kanban</h3><p class="dash-card-sub">Drag & lihat status order</p></div>
+                            <button class="dash-link" onclick="showSection('orders')">Kelola →</button>
+                        </div>
+                        <div class="kanban-board" id="kanban-board">
+                            <div class="kanban-col">
+                                <div class="kanban-col-header">
+                                    <span class="kanban-col-title">⏳ Pending</span>
+                                    <span class="kanban-count pending" id="kanban-pending-count">0</span>
+                                </div>
+                                <div id="kanban-pending"></div>
+                            </div>
+                            <div class="kanban-col">
+                                <div class="kanban-col-header">
+                                    <span class="kanban-col-title">✅ Selesai</span>
+                                    <span class="kanban-count completed" id="kanban-completed-count">0</span>
+                                </div>
+                                <div id="kanban-completed"></div>
+                            </div>
+                            <div class="kanban-col">
+                                <div class="kanban-col-header">
+                                    <span class="kanban-col-title">❌ Dibatalkan</span>
+                                    <span class="kanban-count cancelled" id="kanban-cancelled-count">0</span>
+                                </div>
+                                <div id="kanban-cancelled"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Server Status Monitor (FITUR ADMIN BARU 4) -->
+                    <div class="dash-card" style="margin-top:12px;">
+                        <div class="dash-card-header">
+                            <div><h3><i class="fas fa-server" style="color:var(--accent);margin-right:6px;"></i>Status Server</h3><p class="dash-card-sub">Monitor uptime layanan</p></div>
+                            <span class="live-badge"><span class="live-dot"></span> LIVE</span>
+                        </div>
+                        <div class="server-status-grid" id="server-status-grid"></div>
+                    </div>
+
+                    <!-- Notifikasi Panel (FITUR ADMIN BARU 5) — dipanggil dari tombol header -->
+                    <div id="notif-panel" class="notif-panel">
+                        <div class="notif-panel-header">
+                            <h4><i class="fas fa-bell" style="color:var(--primary);margin-right:6px;"></i>Notifikasi</h4>
+                            <button onclick="document.getElementById('notif-panel').classList.remove('open')" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.85rem;"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div class="notif-list" id="notif-list">
+                            <div style="text-align:center;padding:30px;color:var(--text-muted);font-size:0.85rem;">
+                                <i class="fas fa-bell-slash" style="font-size:1.5rem;display:block;margin-bottom:8px;opacity:0.3;"></i>
+                                Tidak ada notifikasi baru
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
 
                 <!-- ===== TAB: PELANGGAN (FITUR BARU 1 — Identity Table) ===== -->
