@@ -1055,11 +1055,12 @@ async function renderTestimonials(filterQuery = '') {
 async function approveTestimonial(id) {
     const token = AdminAuth.getToken();
     try {
-        await fetch(`/api/testimonials?id=${id}`, {
+        const res = await fetch(`/api/content?type=testimonials&id=${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
             body: JSON.stringify({ status: 'approved' })
         });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Gagal approve'); }
         addActivityLog('Testimoni', `Setujui testimoni ${id}`);
         renderTestimonials();
     } catch (e) { Swal.fire({ icon: 'error', title: 'Gagal', text: e.message, background: '#1a1a2e', color: '#fff' }); }
@@ -1070,7 +1071,8 @@ async function deleteTestimonialDB(id) {
     if (!confirmed.isConfirmed) return;
     const token = AdminAuth.getToken();
     try {
-        await fetch(`/api/testimonials?id=${id}`, { method: 'DELETE', headers: { 'X-Admin-Token': token } });
+        const res = await fetch(`/api/content?type=testimonials&id=${id}`, { method: 'DELETE', headers: { 'X-Admin-Token': token } });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Gagal hapus'); }
         addActivityLog('Testimoni', `Hapus testimoni ${id}`);
         renderTestimonials();
     } catch (e) { Swal.fire({ icon: 'error', title: 'Gagal', text: e.message, background: '#1a1a2e', color: '#fff' }); }
@@ -4322,14 +4324,16 @@ async function loadServerStatus() {
     const container = document.getElementById('server-status-grid');
     if (!container) return;
 
-    const servers = [
-        { name: 'Website', url: '/api/settings?type=qris-public', key: 'website' },
-        { name: 'API Orders', url: '/api/orders?limit=1', key: 'orders', auth: true },
-        { name: 'MongoDB', url: '/api/visitors', key: 'db' },
-        { name: 'QRIS Gateway', url: '/api/qris?action=ping', key: 'qris' },
-    ];
-
     const token = AdminAuth.getToken();
+
+    // Daftar server yang dicek — semua pakai endpoint yang valid
+    const servers = [
+        { name: 'Website',      url: '/api/settings?type=qris-public', method: 'GET',  auth: false, key: 'website' },
+        { name: 'API Orders',   url: '/api/orders?limit=1',             method: 'GET',  auth: true,  key: 'orders'  },
+        { name: 'MongoDB',      url: '/api/visitors?type=live',         method: 'GET',  auth: false, key: 'db'      },
+        { name: 'QRIS Gateway', url: '/api/qris',                       method: 'POST', auth: false, key: 'qris',
+          body: JSON.stringify({ action: 'debug' }) },
+    ];
 
     container.innerHTML = servers.map(s => `
         <div class="server-status-item" id="srv-${s.key}">
@@ -4342,28 +4346,34 @@ async function loadServerStatus() {
     for (const srv of servers) {
         const el = document.getElementById(`srv-${srv.key}`);
         if (!el) continue;
-        const dot = el.querySelector('.server-status-dot');
-        const pingEl = el.querySelector('.server-status-ping');
+        const dot     = el.querySelector('.server-status-dot');
+        const pingEl  = el.querySelector('.server-status-ping');
         const uptimeEl = el.querySelector('.server-status-uptime');
 
         try {
             const start = Date.now();
-            const headers = srv.auth ? { 'X-Admin-Token': token } : {};
-            const res = await fetch(srv.url, { headers, signal: AbortSignal.timeout(5000) });
-            const ms = Date.now() - start;
+            const headers = { 'Content-Type': 'application/json' };
+            if (srv.auth) headers['X-Admin-Token'] = token;
 
-            if (res.ok || res.status === 409) {
+            const fetchOpts = { method: srv.method, headers, signal: AbortSignal.timeout(5000) };
+            if (srv.method === 'POST' && srv.body) fetchOpts.body = srv.body;
+
+            const res = await fetch(srv.url, fetchOpts);
+            const ms  = Date.now() - start;
+
+            // 200, 201, 409 = server hidup
+            if (res.ok || res.status === 409 || res.status === 401) {
                 dot.className = 'server-status-dot online';
-                pingEl.textContent = `${ms}ms`;
+                pingEl.textContent  = `${ms}ms`;
                 uptimeEl.textContent = '99.9%';
             } else {
                 dot.className = 'server-status-dot warning';
-                pingEl.textContent = `${res.status}`;
+                pingEl.textContent  = `${res.status}`;
                 uptimeEl.textContent = 'Degraded';
             }
         } catch {
             dot.className = 'server-status-dot offline';
-            pingEl.textContent = 'Timeout';
+            pingEl.textContent  = 'Timeout';
             uptimeEl.textContent = 'Offline';
         }
     }
