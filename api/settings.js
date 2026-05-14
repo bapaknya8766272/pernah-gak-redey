@@ -71,7 +71,7 @@ export default async function handler(req, res) {
     // Hanya return nilai yang dibutuhkan frontend untuk payment, tidak expose semua
     if (req.method === 'GET' && req.query.type === 'qris-public') {
         const settings = await getCollection('settings');
-        const keys = ['qris_code', 'qris_merchant', 'qris_check_interval'];
+        const keys = ['qris_code', 'qris_merchant', 'qris_check_interval', 'promo_active', 'promo_code'];
         const result = {};
         for (const k of keys) {
             const doc = await settings.findOne({ key: k });

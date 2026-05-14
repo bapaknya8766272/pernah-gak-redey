@@ -31,6 +31,18 @@ async function loadQRISConfig() {
         if (config.qris_merchant)        localStorage.setItem('qris_merchant',        config.qris_merchant);
         if (config.qris_keyorkut)        localStorage.setItem('qris_keyorkut',        config.qris_keyorkut);
         if (config.qris_check_interval)  localStorage.setItem('qris_check_interval',  config.qris_check_interval);
+
+        // Cek promo_active — sembunyikan announcement bar jika nonaktif
+        const promoEl = document.getElementById('announcement-promo');
+        if (promoEl) {
+            const promoActive = config.promo_active !== undefined ? config.promo_active : true;
+            promoEl.style.display = (promoActive === false || promoActive === 'false') ? 'none' : '';
+        }
+        // Update kode promo di announcement bar
+        if (config.promo_code) {
+            const codeEl = document.getElementById('promo-code-display');
+            if (codeEl) codeEl.textContent = config.promo_code;
+        }
     } catch { /* fallback ke localStorage */ }
 }
 

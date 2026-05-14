@@ -167,6 +167,7 @@ async function registerWithEmail() {
     const name = document.getElementById('reg-name')?.value?.trim();
     const email = document.getElementById('reg-email')?.value?.trim();
     const password = document.getElementById('reg-password')?.value;
+    const referralCode = document.getElementById('reg-referral')?.value?.trim() || '';
 
     if (!name || !email || !password) { showAuthError('Semua field harus diisi'); return; }
     if (password.length < 8) { showAuthError('Password minimal 8 karakter'); return; }
@@ -175,7 +176,7 @@ async function registerWithEmail() {
     try {
         const { ok, data } = await authFetch('/api/auth?action=register', {
             method: 'POST',
-            body: JSON.stringify({ name, email, password, deviceFingerprint: getDeviceFingerprint() })
+            body: JSON.stringify({ name, email, password, deviceFingerprint: getDeviceFingerprint(), referralCode })
         });
         if (!ok) {
             if (data.code === 'DEVICE_ALREADY_REGISTERED') {

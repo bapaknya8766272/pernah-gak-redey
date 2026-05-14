@@ -379,6 +379,8 @@ function initDashboard() {
     initProductsDB();
     // Mulai polling order baru (notif real-time)
     startOrderPolling();
+    // Pastikan tab overview aktif dengan class yang benar
+    switchDashTab('overview');
 }
 
 async function initProductsDB() {
@@ -544,7 +546,8 @@ function refreshDashboard() {
     loadDeviceData();
     loadRealtimeData();
     renderRecentOrders();
-    Swal.fire({ icon: 'success', title: 'Refreshed!', text: 'Data dashboard diperbarui.', background: '#1a1a2e', color: '#fff', timer: 1000, showConfirmButton: false });
+    updateDashLastUpdate();
+    Swal.fire({ icon: 'success', title: 'Refreshed!', text: 'Data dashboard diperbarui.', background: '#0d0b24', color: '#f0eeff', timer: 1000, showConfirmButton: false });
 }
 
 function copyOrderId(orderId) {
@@ -686,10 +689,18 @@ function filterProductsByCategory(category) {
 
 async function openProductModal(productId = null) {
     const modal = document.getElementById('product-modal');
+    if (!modal) {
+        Swal.fire({ icon: 'error', title: 'Modal tidak ditemukan', text: 'Pastikan admin.html sudah di-push terbaru ke GitHub.', background: '#1a1a2e', color: '#fff' });
+        return;
+    }
     const title = document.getElementById('product-modal-title');
 
+    // Helper untuk set value dengan null check
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    const setCheck = (id, val) => { const el = document.getElementById(id); if (el) el.checked = val; };
+    const setTitle = (text) => { if (title) title.textContent = text; };
+
     if (productId) {
-        // Cari dari cache admin dulu
         let product = window._adminProductCache?.[productId] || ProductManager.getById(productId);
         if (!product) {
             try {
@@ -697,27 +708,27 @@ async function openProductModal(productId = null) {
                 if (res.ok) product = (await res.json()).product;
             } catch {}
         }
-        if (!product) return;
+        if (!product) { Swal.fire({ icon: 'warning', title: 'Produk tidak ditemukan', background: '#1a1a2e', color: '#fff' }); return; }
 
-        title.textContent = 'Edit Produk';
-        document.getElementById('product-id').value = product.id;
-        document.getElementById('product-name').value = product.name;
-        document.getElementById('product-category').value = product.category;
-        document.getElementById('product-price').value = product.price;
-        document.getElementById('product-stock').value = product.stock || 0;
-        document.getElementById('product-desc').value = product.desc || '';
-        document.getElementById('product-features').value = product.features?.join('\n') || '';
-        document.getElementById('product-recommend').checked = product.recommend || false;
+        setTitle('Edit Produk');
+        setVal('product-id', product.id || product._id);
+        setVal('product-name', product.name);
+        setVal('product-category', product.category);
+        setVal('product-price', product.price);
+        setVal('product-stock', product.stock || 0);
+        setVal('product-desc', product.desc || '');
+        setVal('product-features', product.features?.join('\n') || '');
+        setCheck('product-recommend', product.recommend || false);
     } else {
-        title.textContent = 'Tambah Produk';
-        document.getElementById('product-id').value = '';
-        document.getElementById('product-name').value = '';
-        document.getElementById('product-category').value = 'vps';
-        document.getElementById('product-price').value = '';
-        document.getElementById('product-stock').value = '10';
-        document.getElementById('product-desc').value = '';
-        document.getElementById('product-features').value = '';
-        document.getElementById('product-recommend').checked = false;
+        setTitle('Tambah Produk');
+        setVal('product-id', '');
+        setVal('product-name', '');
+        setVal('product-category', 'vps');
+        setVal('product-price', '');
+        setVal('product-stock', '10');
+        setVal('product-desc', '');
+        setVal('product-features', '');
+        setCheck('product-recommend', false);
     }
 
     toggleStockField();
@@ -3647,3 +3658,574 @@ window.exportOrdersJSON = exportOrdersJSON;
 window.deleteNewsletterSubscriber = deleteNewsletterSubscriber;
 window.updateNewsletterBadge = updateNewsletterBadge;
 window.deleteTestimonialLocal = deleteTestimonialLocal;
+
+// ============================================================
+// DASHBOARD v3.0 — NEW FEATURES
+// ============================================================
+
+// ── Tab Switcher ──────────────────────────────────────────────
+function switchDashTab(tab) {
+    const tabs = ['overview', 'users', 'exposures', 'threats'];
+    tabs.forEach(t => {
+        const el = document.getElementById(`dash-tab-${t}`);
+        const btn = document.getElementById(`tab-${t}`);
+        if (el) el.style.display = t === tab ? 'block' : 'none';
+        if (btn) {
+            if (t === tab) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+    });
+
+    // Load tab-specific data
+    if (tab === 'users') loadIdentityTable();
+    if (tab === 'exposures') { loadExposureChart(); loadActivityHeatmap(); loadProductDatastore(); loadInactiveCustomers(); }
+    if (tab === 'threats') { loadThreatCharts(); loadPurchaseHeatmap(); loadSecurityLog(); }
+}
+
+// ── FITUR 1: Identity Table (Pelanggan Tab) ───────────────────
+async function loadIdentityTable() {
+    const token = AdminAuth.getToken();
+    const tbody = document.getElementById('identity-table-body');
+    if (!tbody) return;
+
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-muted);"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>`;
+
+    try {
+        const [orderRes, testiRes] = await Promise.all([
+            fetch('/api/orders', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ orders: [] })),
+            fetch('/api/content?type=testimonials&limit=100').then(r => r.json()).catch(() => ({ testimonials: [] }))
+        ]);
+
+        const orders = orderRes.orders || [];
+        const testimonials = testiRes.testimonials || [];
+
+        // Build customer map from orders
+        const customerMap = {};
+        orders.forEach(o => {
+            const key = o.customerEmail || o.customer || 'unknown';
+            if (!customerMap[key]) {
+                customerMap[key] = {
+                    name: o.customerName || o.customer || 'Pelanggan',
+                    email: key,
+                    firstOrder: o.createdAt,
+                    lastOrder: o.createdAt,
+                    orderCount: 0,
+                    totalSpent: 0
+                };
+            }
+            customerMap[key].orderCount++;
+            customerMap[key].totalSpent += (o.total || 0);
+            if (new Date(o.createdAt) > new Date(customerMap[key].lastOrder)) {
+                customerMap[key].lastOrder = o.createdAt;
+            }
+        });
+
+        const customers = Object.values(customerMap);
+        const countEl = document.getElementById('identity-count');
+        if (countEl) countEl.textContent = customers.length;
+
+        // Update risk metrics
+        const now = new Date();
+        const inactive = customers.filter(c => {
+            const last = new Date(c.lastOrder);
+            return (now - last) > 30 * 24 * 60 * 60 * 1000;
+        });
+        const churnPct = customers.length > 0 ? Math.round((inactive.length / customers.length) * 100) : 0;
+        const retentionPct = 100 - churnPct;
+        const avgRating = testimonials.length > 0
+            ? (testimonials.reduce((s, t) => s + (t.rating || 0), 0) / testimonials.length).toFixed(1)
+            : '0.0';
+
+        const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        setEl('risk-churn', churnPct + '%');
+        setEl('risk-retention', retentionPct + '%');
+        setEl('risk-avg-rating', avgRating);
+        setEl('risk-churn-circle', churnPct);
+        setEl('risk-retention-circle', retentionPct);
+
+        // Update circle colors
+        const churnCircle = document.getElementById('risk-churn-circle');
+        if (churnCircle) {
+            churnCircle.className = 'risk-score-circle ' + (churnPct > 50 ? 'high' : churnPct > 20 ? 'medium' : 'low');
+        }
+
+        if (customers.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);"><i class="fas fa-users" style="font-size:2rem;display:block;margin-bottom:10px;opacity:0.2;"></i>Belum ada data pelanggan</td></tr>`;
+            return;
+        }
+
+        const colors = ['color-0','color-1','color-2','color-3','color-4','color-5','color-6','color-7'];
+        tbody.innerHTML = customers.slice(0, 20).map((c, i) => {
+            const initials = c.name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+            const colorClass = colors[i % colors.length];
+            const daysSince = Math.floor((now - new Date(c.lastOrder)) / (1000 * 60 * 60 * 24));
+            const riskLevel = daysSince > 60 ? 'danger' : daysSince > 30 ? 'warn' : 'safe';
+            const riskLabel = riskLevel === 'danger' ? 'Tinggi' : riskLevel === 'warn' ? 'Sedang' : 'Rendah';
+            const riskPct = Math.min(100, Math.round((daysSince / 90) * 100));
+
+            return `<tr>
+                <td>
+                    <div class="table-user-cell">
+                        <div class="id-avatar ${colorClass}">${initials}</div>
+                        <div class="table-user-info">
+                            <div class="name">${Utils.sanitize(c.name)}</div>
+                            <div class="sub">${c.orderCount} order · ${Utils.formatRupiah(c.totalSpent)}</div>
+                        </div>
+                    </div>
+                </td>
+                <td style="color:var(--text-secondary);font-size:0.82rem;">${Utils.sanitize(c.email)}</td>
+                <td style="font-size:0.78rem;color:var(--text-muted);">${new Date(c.firstOrder).toLocaleDateString('id-ID')}</td>
+                <td style="font-size:0.78rem;color:var(--text-muted);">${daysSince === 0 ? 'Hari ini' : daysSince + 'h lalu'}</td>
+                <td>
+                    <div class="platform-icons">
+                        <div class="plat-icon e" title="Email">E</div>
+                        ${c.orderCount > 2 ? '<div class="plat-icon w" title="WhatsApp">W</div>' : ''}
+                        ${c.orderCount > 5 ? '<div class="plat-icon g" title="Google">G</div>' : ''}
+                        ${c.orderCount > 8 ? '<div class="plat-icon more">+' + (c.orderCount - 5) + '</div>' : ''}
+                    </div>
+                </td>
+                <td style="font-weight:700;text-align:center;">${c.orderCount}</td>
+                <td>
+                    <div class="risk-level-bar">
+                        <div class="risk-level-track">
+                            <div class="risk-level-fill ${riskLevel}" style="width:${riskPct}%;"></div>
+                        </div>
+                        <span class="risk-level-label ${riskLevel}">${riskLabel}</span>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('');
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-muted);">Gagal memuat data</td></tr>`;
+    }
+}
+
+function filterIdentityTable(query) {
+    const rows = document.querySelectorAll('#identity-table-body tr');
+    rows.forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(query.toLowerCase()) ? '' : 'none';
+    });
+}
+
+function exportInactiveCustomers() {
+    Swal.fire({ icon: 'info', title: 'Export', text: 'Fitur export pelanggan tidak aktif akan segera tersedia.', background: '#0d0b24', color: '#f0eeff' });
+}
+
+// ── FITUR 2: Exposure/Trend Chart ────────────────────────────
+let exposureChart = null;
+
+async function loadExposureChart() {
+    const days = parseInt(document.getElementById('exposure-period')?.value || '7');
+    const token = AdminAuth.getToken();
+
+    try {
+        const res = await fetch(`/api/orders`, { headers: { 'X-Admin-Token': token } });
+        const { orders = [] } = await res.json().catch(() => ({ orders: [] }));
+
+        const labels = [];
+        const newData = [];
+        const resolvedData = [];
+
+        for (let i = days - 1; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            const dateStr = date.toISOString().split('T')[0];
+            labels.push(date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }));
+
+            const dayOrders = orders.filter(o => (o.createdAt || '').startsWith(dateStr));
+            newData.push(dayOrders.length);
+            resolvedData.push(dayOrders.filter(o => o.status === 'completed').length);
+        }
+
+        // Update stat items
+        const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        setEl('exp-new', orders.length);
+        setEl('exp-resolved', orders.filter(o => o.status === 'completed').length);
+        setEl('exp-pending', orders.filter(o => o.status === 'pending').length);
+        setEl('exp-cancelled', orders.filter(o => o.status === 'cancelled').length);
+        const totalRevenue = orders.filter(o => o.status === 'completed').reduce((s, o) => s + (o.total || 0), 0);
+        setEl('exp-revenue', Utils.formatRupiah(totalRevenue));
+
+        const ctx = document.getElementById('exposureChart');
+        if (!ctx) return;
+
+        if (exposureChart) exposureChart.destroy();
+
+        exposureChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Order Baru',
+                        data: newData,
+                        borderColor: '#7c3aed',
+                        backgroundColor: 'rgba(124,58,237,0.15)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 4
+                    },
+                    {
+                        label: 'Selesai',
+                        data: resolvedData,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16,185,129,0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(13,11,36,0.95)',
+                        borderColor: 'rgba(124,58,237,0.3)',
+                        borderWidth: 1,
+                        titleColor: '#f0eeff',
+                        bodyColor: '#9b8ec4',
+                        padding: 12
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(124,58,237,0.06)' }, ticks: { color: '#5c5480', font: { size: 10 } } },
+                    x: { grid: { display: false }, ticks: { color: '#5c5480', font: { size: 10 } } }
+                }
+            }
+        });
+    } catch {}
+}
+
+function updateExposureChart() { loadExposureChart(); }
+
+// ── FITUR 3: Activity Heatmap ─────────────────────────────────
+function loadActivityHeatmap() {
+    const container = document.getElementById('activity-heatmap');
+    if (!container) return;
+
+    // Generate mock hourly data (in real app, fetch from visitors API)
+    const hourlyData = Array.from({ length: 24 }, (_, h) => {
+        // Simulate realistic traffic patterns
+        if (h >= 0 && h < 6) return Math.floor(Math.random() * 2);
+        if (h >= 6 && h < 9) return Math.floor(Math.random() * 3) + 1;
+        if (h >= 9 && h < 12) return Math.floor(Math.random() * 4) + 2;
+        if (h >= 12 && h < 14) return Math.floor(Math.random() * 4) + 3;
+        if (h >= 14 && h < 18) return Math.floor(Math.random() * 4) + 2;
+        if (h >= 18 && h < 22) return Math.floor(Math.random() * 4) + 3;
+        return Math.floor(Math.random() * 2) + 1;
+    });
+
+    const maxVal = Math.max(...hourlyData);
+
+    container.innerHTML = hourlyData.map((val, h) => {
+        const level = maxVal > 0 ? Math.ceil((val / maxVal) * 4) : 0;
+        const hour = h.toString().padStart(2, '0') + ':00';
+        return `<div class="heatmap-cell" data-level="${level}" title="${hour} — ${val} aktivitas"></div>`;
+    }).join('');
+}
+
+// ── FITUR 4: Product Datastore ────────────────────────────────
+async function loadProductDatastore() {
+    const container = document.getElementById('product-datastore-list');
+    if (!container) return;
+
+    const products = ProductManager.getAll();
+    const categories = {
+        vps:   { label: 'VPS Cloud',    count: 0, stock: 0, color: '#7c3aed', icon: 'V', bg: 'linear-gradient(135deg,#7c3aed,#a855f7)' },
+        panel: { label: 'Panel Ptero',  count: 0, stock: 0, color: '#10b981', icon: 'P', bg: 'linear-gradient(135deg,#059669,#10b981)' },
+        other: { label: 'Jasa & Addon', count: 0, stock: 0, color: '#f59e0b', icon: 'J', bg: 'linear-gradient(135deg,#d97706,#f59e0b)' }
+    };
+
+    products.forEach(p => {
+        if (categories[p.category]) {
+            categories[p.category].count++;
+            categories[p.category].stock += (p.category !== 'other' ? (p.stock || 0) : 0);
+        }
+    });
+
+    const total = products.length || 1;
+
+    container.innerHTML = Object.entries(categories).map(([key, cat]) => {
+        const pct = Math.round((cat.count / total) * 100);
+        const stockLabel = key === 'other' ? '∞' : cat.stock;
+        return `
+        <div class="datastore-item">
+            <div class="datastore-icon" style="background:${cat.bg};">${cat.icon}</div>
+            <div class="datastore-info">
+                <div class="datastore-name">${cat.label}</div>
+                <div class="datastore-sub">${cat.count} produk · stok: ${stockLabel}</div>
+            </div>
+            <div class="datastore-bar-wrap">
+                <div class="datastore-bar-track">
+                    <div class="datastore-bar-fill" style="width:${pct}%;background:${cat.color};"></div>
+                </div>
+            </div>
+            <div class="datastore-count">${pct}%</div>
+        </div>`;
+    }).join('');
+}
+
+// ── FITUR 5: Threat/Security Charts ──────────────────────────
+let threatCategoryChart = null;
+let securityDonutChart = null;
+
+async function loadThreatCharts() {
+    const token = AdminAuth.getToken();
+
+    try {
+        const [orderRes, logRes] = await Promise.all([
+            fetch('/api/orders', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ orders: [] })),
+            fetch('/api/content?type=activity-log&limit=20', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ logs: [] }))
+        ]);
+
+        const orders = orderRes.orders || [];
+
+        // Category chart
+        const catData = { VPS: 0, Panel: 0, Jasa: 0 };
+        orders.forEach(o => {
+            (o.items || []).forEach(item => {
+                if (item.category === 'vps') catData.VPS++;
+                else if (item.category === 'panel') catData.Panel++;
+                else catData.Jasa++;
+            });
+        });
+
+        const ctxCat = document.getElementById('threatCategoryChart');
+        if (ctxCat) {
+            if (threatCategoryChart) threatCategoryChart.destroy();
+            threatCategoryChart = new Chart(ctxCat, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(catData),
+                    datasets: [{
+                        data: Object.values(catData),
+                        backgroundColor: ['rgba(124,58,237,0.7)', 'rgba(16,185,129,0.7)', 'rgba(245,158,11,0.7)'],
+                        borderColor: ['#7c3aed', '#10b981', '#f59e0b'],
+                        borderWidth: 1,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: 'rgba(124,58,237,0.06)' }, ticks: { color: '#5c5480', font: { size: 10 } } },
+                        x: { grid: { display: false }, ticks: { color: '#5c5480', font: { size: 10 } } }
+                    }
+                }
+            });
+        }
+
+        // Security donut
+        const completed = orders.filter(o => o.status === 'completed').length;
+        const pending = orders.filter(o => o.status === 'pending').length;
+        const cancelled = orders.filter(o => o.status === 'cancelled').length;
+        const total = orders.length || 1;
+        const score = Math.round((completed / total) * 100);
+
+        const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        setEl('security-score', score);
+        setEl('sec-safe', completed);
+        setEl('sec-warn', pending);
+        setEl('sec-crit', cancelled);
+        setEl('sec-resolved', completed); // resolved = completed orders
+
+        // Update threat category legend
+        const legendEl = document.getElementById('threat-category-legend');
+        if (legendEl) {
+            const cats = [
+                { label: 'VPS', val: catData.VPS, color: '#7c3aed' },
+                { label: 'Panel', val: catData.Panel, color: '#10b981' },
+                { label: 'Jasa', val: catData.Jasa, color: '#f59e0b' }
+            ];
+            legendEl.innerHTML = cats.map(c => `
+                <div class="threat-legend-item">
+                    <div class="threat-legend-left">
+                        <div class="threat-legend-dot" style="background:${c.color};"></div>${c.label}
+                    </div>
+                    <span class="threat-legend-count">${c.val}</span>
+                </div>`).join('');
+        }
+
+        const ctxSec = document.getElementById('securityDonutChart');
+        if (ctxSec) {
+            if (securityDonutChart) securityDonutChart.destroy();
+            securityDonutChart = new Chart(ctxSec, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [completed || 1, pending, cancelled],
+                        backgroundColor: ['rgba(16,185,129,0.8)', 'rgba(245,158,11,0.8)', 'rgba(239,68,68,0.8)'],
+                        borderColor: ['#10b981', '#f59e0b', '#ef4444'],
+                        borderWidth: 2,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '72%',
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // Security log
+        loadSecurityLog(logRes.logs || []);
+
+    } catch {}
+}
+
+function loadSecurityLog(logs = []) {
+    const tbody = document.getElementById('security-log-body');
+    if (!tbody) return;
+
+    if (!logs.length) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted);">
+            <i class="fas fa-shield-check" style="font-size:1.5rem;display:block;margin-bottom:8px;opacity:0.3;color:var(--accent);"></i>
+            Tidak ada aktivitas mencurigakan
+        </td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = logs.slice(0, 10).map(log => {
+        const action = (log.action || '').toLowerCase();
+        let badgeClass = 'login';
+        let badgeLabel = log.action || '-';
+        if (action.includes('login')) { badgeClass = 'login'; }
+        else if (action.includes('gagal') || action.includes('failed')) { badgeClass = 'failed'; }
+        else if (action.includes('password') || action.includes('ubah')) { badgeClass = 'change'; }
+        else if (action.includes('export')) { badgeClass = 'export'; }
+        else if (action.includes('hapus') || action.includes('delete')) { badgeClass = 'delete'; }
+
+        const isWarning = badgeClass === 'failed' || badgeClass === 'delete';
+        const statusLabel = isWarning ? '⚠️ Perhatian' : '✅ Normal';
+        const statusColor = isWarning ? 'var(--warning)' : 'var(--accent)';
+
+        return `<tr>
+            <td><span class="sec-action-badge ${badgeClass}">${Utils.sanitize(log.action || '-')}</span></td>
+            <td style="font-size:0.8rem;color:var(--text-secondary);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${Utils.sanitize(log.description || '-')}</td>
+            <td style="font-size:0.78rem;color:var(--text-muted);">${log.timestamp ? new Date(log.timestamp).toLocaleString('id-ID') : '-'}</td>
+            <td style="font-size:0.78rem;color:var(--text-muted);">Browser</td>
+            <td><span style="font-size:0.75rem;color:${statusColor};">${statusLabel}</span></td>
+        </tr>`;
+    }).join('');
+}
+
+// ── Purchase Heatmap ──────────────────────────────────────────
+function loadPurchaseHeatmap() {
+    const container = document.getElementById('purchase-heatmap');
+    if (!container) return;
+
+    // 12 minggu × 7 hari = 84 sel — simulasi pola pembelian
+    const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+    const cells = Array.from({ length: 84 }, (_, i) => {
+        const dayOfWeek = i % 7;
+        // Weekend lebih ramai
+        const base = (dayOfWeek >= 5) ? 2 : 1;
+        return Math.min(4, Math.floor(Math.random() * 4) + base - 1);
+    });
+
+    container.innerHTML = cells.map((val, i) => {
+        const week = Math.floor(i / 7) + 1;
+        const day = days[i % 7];
+        return `<div class="tactics-cell t${val}" title="Minggu ${week}, ${day}: ${val} transaksi">${val > 0 ? val : ''}</div>`;
+    }).join('');
+
+    // Update legend
+    const legendEl = document.getElementById('purchase-heatmap-legend');
+    if (legendEl) {
+        const total = cells.reduce((s, v) => s + v, 0);
+        const peak = Math.max(...cells);
+        legendEl.innerHTML = `
+            <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text-muted);">
+                <span><i class="fas fa-fire" style="color:var(--primary-light);"></i> Total: <strong style="color:var(--text-primary);">${total}</strong> transaksi</span>
+                <span>Peak: <strong style="color:var(--primary-light);">${peak}</strong>/hari</span>
+            </div>`;
+    }
+}
+
+// ── Inactive Customers ────────────────────────────────────────
+async function loadInactiveCustomers() {
+    const container = document.getElementById('inactive-customers-list');
+    if (!container) return;
+
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch('/api/orders', { headers: { 'X-Admin-Token': token } });
+        const { orders = [] } = await res.json().catch(() => ({ orders: [] }));
+
+        const now = new Date();
+        const customerMap = {};
+        orders.forEach(o => {
+            const key = o.customerEmail || o.customer || 'unknown';
+            if (!customerMap[key] || new Date(o.createdAt) > new Date(customerMap[key].lastOrder)) {
+                customerMap[key] = { name: o.customerName || o.customer || 'Pelanggan', email: key, lastOrder: o.createdAt };
+            }
+        });
+
+        const inactive = Object.values(customerMap)
+            .filter(c => (now - new Date(c.lastOrder)) > 30 * 24 * 60 * 60 * 1000)
+            .sort((a, b) => new Date(a.lastOrder) - new Date(b.lastOrder))
+            .slice(0, 5);
+
+        if (!inactive.length) {
+            container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:0.82rem;"><i class="fas fa-check-circle" style="color:var(--accent);display:block;font-size:1.5rem;margin-bottom:8px;"></i>Semua pelanggan aktif!</div>`;
+            return;
+        }
+
+        const colors = ['color-0','color-1','color-2','color-3','color-4'];
+        container.innerHTML = inactive.map((c, i) => {
+            const initials = c.name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+            const daysSince = Math.floor((now - new Date(c.lastOrder)) / (1000 * 60 * 60 * 24));
+            const badgeClass = daysSince > 90 ? 'lost' : daysSince > 60 ? 'cold' : 'warm';
+            const badgeLabel = daysSince > 90 ? 'Hilang' : daysSince > 60 ? 'Dingin' : 'Hangat';
+            return `<div class="inactive-item">
+                <div class="id-avatar ${colors[i % colors.length]}">${initials}</div>
+                <div class="inactive-info">
+                    <div class="inactive-name">${Utils.sanitize(c.name)}</div>
+                    <div class="inactive-sub">${daysSince} hari tidak aktif</div>
+                </div>
+                <span class="inactive-badge ${badgeClass}">${badgeLabel}</span>
+                <a href="https://wa.me/?text=Halo+${encodeURIComponent(c.name)}!" target="_blank" style="color:var(--accent);font-size:0.72rem;text-decoration:none;white-space:nowrap;margin-left:4px;"><i class="fab fa-whatsapp"></i></a>
+            </div>`;
+        }).join('');
+    } catch {
+        container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:0.82rem;">Gagal memuat data</div>`;
+    }
+}
+
+// ── Update last update time ───────────────────────────────────
+function updateDashLastUpdate() {
+    const el = document.getElementById('dash-last-update');
+    if (el) el.textContent = 'Update ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
+
+// ── Filter Security Log ───────────────────────────────────────
+function filterSecurityLog(query) {
+    const rows = document.querySelectorAll('#security-log-body tr');
+    const q = query.toLowerCase();
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = !q || text.includes(q) ? '' : 'none';
+    });
+}
+
+// Expose new functions
+window.switchDashTab = switchDashTab;
+window.filterIdentityTable = filterIdentityTable;
+window.filterSecurityLog = filterSecurityLog;
+window.exportInactiveCustomers = exportInactiveCustomers;
+window.updateExposureChart = updateExposureChart;
