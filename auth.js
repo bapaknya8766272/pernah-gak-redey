@@ -95,7 +95,9 @@ function initGoogleSignIn() {
         client_id: clientId,
         callback: handleGoogleCallback,
         auto_select: false,
-        cancel_on_tap_outside: true
+        cancel_on_tap_outside: true,
+        // FedCM migration — gunakan use_fedcm_for_prompt
+        use_fedcm_for_prompt: true
     });
 }
 
@@ -119,23 +121,53 @@ async function handleGoogleCallback(response) {
 }
 
 function signInWithGoogle() {
-    initGoogleSignIn();
-    if (!window.google?.accounts?.id) {
-        showAuthError('Google Sign-In tidak tersedia. Pastikan GOOGLE_CLIENT_ID sudah diset.');
+    const clientId = window.GOOGLE_CLIENT_ID || '';
+
+    // Cek apakah Client ID sudah dikonfigurasi
+    if (!clientId || clientId.includes('YOUR_CLIENT_ID')) {
+        showAuthError('Google Sign-In belum dikonfigurasi. Silakan daftar dengan email.');
         return;
     }
-    google.accounts.id.prompt((notification) => {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            // Fallback: render button
-            const container = document.getElementById('google-signin-btn');
-            if (container) {
-                container.innerHTML = '';
-                google.accounts.id.renderButton(container, {
-                    theme: 'outline', size: 'large', width: '100%', text: 'continue_with'
-                });
-            }
+
+    initGoogleSignIn();
+
+    if (!window.google?.accounts?.id) {
+        showAuthError('Google Sign-In tidak tersedia. Gunakan login email.');
+        return;
+    }
+
+    // Render button langsung di container (lebih reliable dari prompt)
+    const container = document.getElementById('google-signin-btn');
+    if (container) {
+        container.innerHTML = '';
+        // width harus angka pixel, bukan '%'
+        const btnWidth = Math.min(container.offsetWidth || 360, 400);
+        try {
+            google.accounts.id.renderButton(container, {
+                theme: 'outline',
+                size: 'large',
+                width: btnWidth,
+                text: 'continue_with',
+                shape: 'rectangular',
+                logo_alignment: 'left'
+            });
+        } catch (e) {
+            // Fallback jika renderButton gagal (misal Client ID tidak valid)
+            container.innerHTML = `
+                <button onclick="showAuthError('Google Sign-In tidak tersedia. Pastikan Client ID sudah dikonfigurasi di Google Cloud Console dan domain sudah ditambahkan ke Authorized Origins.')"
+                    style="width:100%;display:flex;align-items:center;justify-content:center;gap:12px;padding:14px;background:#fff;color:#333;border:1px solid #ddd;border-radius:12px;font-size:1rem;font-weight:600;cursor:pointer;">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="22" height="22" alt="Google">
+                    Lanjutkan dengan Google
+                </button>`;
         }
-    });
+    }
+
+    // Juga coba prompt (One Tap) — tapi jangan crash jika gagal
+    try {
+        google.accounts.id.prompt((notification) => {
+            // Abaikan error FedCM — sudah ada renderButton sebagai fallback
+        });
+    } catch { /* silent */ }
 }
 
 // ============================================================
@@ -270,8 +302,27 @@ function updateHeaderUI() {
 
 function openAuthModal() {
     document.getElementById('auth-modal')?.classList.add('active');
-    initGoogleSignIn();
     clearAuthForm();
+    // Init Google Sign-In dan render button setelah modal terbuka
+    setTimeout(() => {
+        initGoogleSignIn();
+        const clientId = window.GOOGLE_CLIENT_ID || '';
+        const container = document.getElementById('google-signin-btn');
+        if (container && clientId && window.google?.accounts?.id) {
+            container.innerHTML = '';
+            const btnWidth = Math.min(container.offsetWidth || 360, 400);
+            try {
+                google.accounts.id.renderButton(container, {
+                    theme: 'outline',
+                    size: 'large',
+                    width: btnWidth,
+                    text: 'continue_with',
+                    shape: 'rectangular',
+                    logo_alignment: 'left'
+                });
+            } catch { /* silent — fallback ke email login */ }
+        }
+    }, 100);
 }
 
 function closeAuthModal() {
