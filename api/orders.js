@@ -40,6 +40,24 @@ export default async function handler(req, res) {
 
     // POST (buat order baru dari checkout) — TIDAK butuh admin token
     // GET, PUT, DELETE — butuh admin token
+    // KECUALI: PUT dengan action=complete-by-payment (dari QRIS callback)
+
+    // ── Endpoint publik: update status setelah pembayaran QRIS ──
+    if (req.method === 'PUT' && req.query.action === 'complete-by-payment') {
+        const { orderId: targetOrderId, transactionId } = req.body;
+        if (!targetOrderId) return res.status(400).json({ error: 'orderId diperlukan' });
+        const orders = await getCollection('orders');
+        const order = await orders.findOne({ orderId: String(targetOrderId).substring(0, 50) });
+        if (!order) return res.status(404).json({ error: 'Order tidak ditemukan' });
+        // Hanya boleh update dari pending ke completed
+        if (order.status !== 'pending') return res.status(409).json({ error: 'Order sudah diproses', status: order.status });
+        await orders.updateOne(
+            { orderId: String(targetOrderId).substring(0, 50) },
+            { $set: { status: 'completed', updatedAt: new Date(), transactionId: transactionId || null } }
+        );
+        return res.status(200).json({ success: true, message: 'Status order diupdate ke completed' });
+    }
+
     if (req.method !== 'POST' && !admin) {
         return res.status(401).json({ error: 'Admin only' });
     }
