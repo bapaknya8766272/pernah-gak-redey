@@ -1193,10 +1193,13 @@ window.printCart = printCart;
 // ========================================
 function renderProducts(category = 'all') {
     currentCategory = category;
+    window.currentCategory = category;
     const grid = document.getElementById('products-grid');
     if (!grid) return;
 
     let products = ProductManager.getByCategory(category);
+
+    // Filter search query
     if (currentSearchQuery) {
         products = products.filter(p =>
             p.name.toLowerCase().includes(currentSearchQuery) ||
@@ -1205,11 +1208,19 @@ function renderProducts(category = 'all') {
         );
     }
 
+    // ── FITUR: Filter Harga Range ──────────────────────────────
+    if (typeof priceFilterMin !== 'undefined' && typeof priceFilterMax !== 'undefined') {
+        if (priceFilterMin > 0 || priceFilterMax < Infinity) {
+            products = products.filter(p => p.price >= priceFilterMin && p.price <= priceFilterMax);
+        }
+    }
+
     if (products.length === 0) {
         grid.innerHTML = `<div class="no-results" style="grid-column:1/-1;text-align:center;padding:60px 20px;">
             <i class="fas fa-search" style="font-size:3rem;color:var(--text-muted);margin-bottom:15px;display:block;"></i>
             <h3 style="margin-bottom:8px;">Tidak ada produk ditemukan</h3>
             <p style="color:var(--text-secondary);">Coba kata kunci lain atau pilih kategori berbeda</p>
+            ${(typeof priceFilterMin !== 'undefined' && (priceFilterMin > 0 || priceFilterMax < Infinity)) ? `<button onclick="priceFilterMin=0;priceFilterMax=Infinity;renderProducts('${category}')" class="btn btn-outline btn-sm" style="margin-top:12px;"><i class="fas fa-times"></i> Reset Filter Harga</button>` : ''}
         </div>`;
         return;
     }
@@ -1237,14 +1248,20 @@ function renderProducts(category = 'all') {
         const inWishlist = WishlistManager.has(product.id);
         const pid = product.id;
 
+        // ── Badge BARU & Stock Warning ─────────────────────────
+        const isNew = typeof isNewProduct === 'function' ? isNewProduct(product) : false;
+        const stockWarn = typeof getStockWarning === 'function' ? getStockWarning(product) : null;
+
         return `
-        <div class="product-card ${product.recommend ? 'best-seller' : ''}" style="animation:fadeInUp 0.4s ease both;">
+        <div class="product-card ${product.recommend ? 'best-seller' : ''}" style="animation:fadeInUp 0.4s ease both;position:relative;">
+            ${isNew ? '<span style="position:absolute;top:10px;left:10px;background:linear-gradient(135deg,#10b981,#059669);color:white;font-size:0.62rem;font-weight:800;padding:3px 8px;border-radius:20px;letter-spacing:0.5px;z-index:2;">✨ BARU</span>' : ''}
             <div class="product-header">
                 ${product.category !== 'other' ? `<span class="stock-badge ${stockClass}">${stockText}</span>` : ''}
                 <div class="product-icon"><i class="fas ${icons[product.category] || 'fa-box'}"></i></div>
                 <h3>${Utils.sanitize(product.name)}</h3>
                 <div class="product-price">${Utils.formatRupiah(product.price)}<span style="font-size:0.7em;font-weight:400;color:var(--text-muted)">/bulan</span></div>
                 ${sold > 0 ? `<div class="product-sold"><i class="fas fa-fire" style="color:var(--warning);"></i> ${sold} terjual</div>` : ''}
+                ${stockWarn ? `<div style="display:flex;align-items:center;gap:4px;font-size:0.72rem;font-weight:700;color:${stockWarn.color};margin-top:4px;"><i class="fas ${stockWarn.icon}"></i> ${stockWarn.text}</div>` : ''}
             </div>
             ${product.category !== 'other' ? `
             <div class="stock-progress-wrap">
@@ -2567,11 +2584,13 @@ function updateStickyOrder() {
 }
 
 // Patch CartManager.updateUI untuk juga update sticky
-const _origCartUpdateUI = CartManager.updateUI.bind(CartManager);
-CartManager.updateUI = function() {
-    _origCartUpdateUI();
-    updateStickyOrder();
-};
+CartManager.updateUI = (function(orig) {
+    return function() {
+        orig.call(CartManager);
+        if (typeof updateStickyOrder === 'function') updateStickyOrder();
+        if (typeof updateFloatingCart === 'function') updateFloatingCart();
+    };
+})(CartManager.updateUI);
 
 // ============================================================
 // FITUR 3: FLASH SALE BANNER
@@ -3246,25 +3265,16 @@ window.initStickyBuyBtn = initStickyBuyBtn;
 // 10 FITUR BARU WEBSITE v5.0
 // ============================================================
 
-// ── FITUR 1: Back to Top Button ───────────────────────────────
+// ── FITUR 1: Back to Top Button — sudah ada di index.html, cukup init scroll listener ──
 (function initBackToTop() {
-    const btn = document.createElement('button');
-    btn.id = 'back-to-top';
-    btn.innerHTML = '<i class="fas fa-arrow-up"></i>';
-    btn.title = 'Kembali ke atas';
-    btn.style.cssText = `
-        position:fixed;bottom:90px;right:20px;width:42px;height:42px;
-        background:var(--gradient-primary);color:white;border:none;
-        border-radius:50%;cursor:pointer;z-index:800;display:none;
-        align-items:center;justify-content:center;font-size:1rem;
-        box-shadow:0 4px 20px rgba(124,58,237,0.5);transition:all 0.3s;`;
-    btn.onmouseover = () => btn.style.transform = 'translateY(-3px) scale(1.1)';
-    btn.onmouseout  = () => btn.style.transform = '';
-    btn.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
-    document.body.appendChild(btn);
     window.addEventListener('scroll', () => {
+        const btn = document.getElementById('back-to-top');
+        if (!btn) return;
         btn.style.display = window.scrollY > 400 ? 'flex' : 'none';
     }, { passive: true });
+    // Pastikan style awal
+    const btn = document.getElementById('back-to-top');
+    if (btn) btn.style.display = 'none';
 })();
 
 // ── FITUR 2: Filter Harga Range ───────────────────────────────
@@ -3507,12 +3517,7 @@ function updateFloatingCart() {
 }
 window.updateFloatingCart = updateFloatingCart;
 
-// Patch CartManager.updateUI untuk juga update floating cart
-const _origCartUpdateUI = CartManager.updateUI.bind(CartManager);
-CartManager.updateUI = function() {
-    _origCartUpdateUI();
-    updateFloatingCart();
-};
+// (Patch CartManager.updateUI sudah dilakukan di atas — tidak perlu duplikat)
 
 // Init semua fitur baru saat DOM ready
 document.addEventListener('DOMContentLoaded', () => {

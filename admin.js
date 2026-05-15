@@ -672,6 +672,7 @@ async function renderProductsTable(filter = '') {
                     <div class="action-btns">
                         ${product.category !== 'other' ? `<button class="action-btn restock" onclick="openRestockModal('${pid}')" title="Restock"><i class="fas fa-plus"></i></button>` : ''}
                         <button class="action-btn edit" onclick="editProduct('${pid}')" title="Edit"><i class="fas fa-edit"></i></button>
+                        <button class="action-btn" onclick="quickEditPrice('${pid}', ${product.price})" title="Edit Harga Cepat" style="background:rgba(245,158,11,0.12);color:var(--warning);"><i class="fas fa-tag"></i></button>
                         <button class="action-btn delete" onclick="deleteProduct('${pid}')" title="Hapus"><i class="fas fa-trash"></i></button>
                     </div>
                 </td>
@@ -2543,7 +2544,7 @@ function initRealTimeChart() {
 // ============================================================
 // EXPOSE NEW FUNCTIONS GLOBALLY
 // ============================================================
-window.VoucherManager = VoucherManager;
+// window.VoucherManager — tidak perlu, VoucherManager diakses via fungsi-fungsi di bawah
 window.openVoucherModal = openVoucherModal;
 window.closeVoucherModal = closeVoucherModal;
 window.generateVoucherCode = generateVoucherCode;
