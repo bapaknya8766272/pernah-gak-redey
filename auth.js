@@ -84,21 +84,27 @@ async function authFetch(url, options = {}) {
 // GOOGLE SIGN-IN
 // ============================================================
 let googleInitialized = false;
+let googleAvailable = false; // true jika GSI berhasil init
 
 function initGoogleSignIn() {
     const clientId = window.GOOGLE_CLIENT_ID || '';
-    if (!clientId || !window.google?.accounts?.id) return;
-    if (googleInitialized) return;
+    if (!clientId || !window.google?.accounts?.id) return false;
+    if (googleInitialized) return googleAvailable;
     googleInitialized = true;
 
-    google.accounts.id.initialize({
-        client_id: clientId,
-        callback: handleGoogleCallback,
-        auto_select: false,
-        cancel_on_tap_outside: true,
-        // FedCM migration — gunakan use_fedcm_for_prompt
-        use_fedcm_for_prompt: true
-    });
+    try {
+        google.accounts.id.initialize({
+            client_id: clientId,
+            callback: handleGoogleCallback,
+            auto_select: false,
+            cancel_on_tap_outside: true,
+            use_fedcm_for_prompt: true
+        });
+        googleAvailable = true;
+    } catch {
+        googleAvailable = false;
+    }
+    return googleAvailable;
 }
 
 async function handleGoogleCallback(response) {
@@ -120,29 +126,34 @@ async function handleGoogleCallback(response) {
     }
 }
 
-function signInWithGoogle() {
+// Dipanggil saat tombol Google diklik
+function handleGoogleBtnClick() {
     const clientId = window.GOOGLE_CLIENT_ID || '';
 
-    // Cek apakah Client ID sudah dikonfigurasi
+    // Belum dikonfigurasi sama sekali
     if (!clientId || clientId.includes('YOUR_CLIENT_ID')) {
-        showAuthError('Google Sign-In belum dikonfigurasi. Silakan daftar dengan email.');
+        showAuthError('Google Sign-In belum dikonfigurasi. Gunakan login email di bawah.');
         return;
     }
 
-    initGoogleSignIn();
-
+    // GSI library belum load
     if (!window.google?.accounts?.id) {
-        showAuthError('Google Sign-In tidak tersedia. Gunakan login email.');
+        showAuthError('Google Sign-In sedang dimuat. Coba lagi dalam beberapa detik, atau gunakan login email.');
         return;
     }
 
-    // Render button langsung di container (lebih reliable dari prompt)
-    const container = document.getElementById('google-signin-btn');
+    const ready = initGoogleSignIn();
+    if (!ready) {
+        showAuthError('Google Sign-In tidak tersedia saat ini. Gunakan login email.');
+        return;
+    }
+
+    // Coba render button GSI yang asli menggantikan tombol HTML kita
+    const container = document.getElementById('google-signin-container');
     if (container) {
-        container.innerHTML = '';
-        // width harus angka pixel, bukan '%'
-        const btnWidth = Math.min(container.offsetWidth || 360, 400);
         try {
+            container.innerHTML = ''; // hapus tombol HTML
+            const btnWidth = Math.min(container.offsetWidth || 360, 400);
             google.accounts.id.renderButton(container, {
                 theme: 'outline',
                 size: 'large',
@@ -151,24 +162,59 @@ function signInWithGoogle() {
                 shape: 'rectangular',
                 logo_alignment: 'left'
             });
-        } catch (e) {
-            // Fallback jika renderButton gagal (misal Client ID tidak valid)
-            container.innerHTML = `
-                <button onclick="showAuthError('Google Sign-In tidak tersedia. Pastikan Client ID sudah dikonfigurasi di Google Cloud Console dan domain sudah ditambahkan ke Authorized Origins.')"
-                    style="width:100%;display:flex;align-items:center;justify-content:center;gap:12px;padding:14px;background:#fff;color:#333;border:1px solid #ddd;border-radius:12px;font-size:1rem;font-weight:600;cursor:pointer;">
-                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="22" height="22" alt="Google">
-                    Lanjutkan dengan Google
-                </button>`;
+            // Setelah render, klik otomatis tombol GSI yang baru
+            setTimeout(() => {
+                const gsiBtn = container.querySelector('[role="button"], button, div[tabindex]');
+                if (gsiBtn) gsiBtn.click();
+            }, 200);
+        } catch {
+            // renderButton gagal — kembalikan tombol HTML dan tampilkan error
+            _restoreGoogleBtn();
+            showAuthError('Google Sign-In tidak tersedia. Pastikan OAuth consent screen sudah di-publish di Google Cloud Console.');
         }
     }
-
-    // Juga coba prompt (One Tap) — tapi jangan crash jika gagal
-    try {
-        google.accounts.id.prompt((notification) => {
-            // Abaikan error FedCM — sudah ada renderButton sebagai fallback
-        });
-    } catch { /* silent */ }
 }
+
+// Kembalikan tombol Google HTML jika GSI gagal
+function _restoreGoogleBtn() {
+    const container = document.getElementById('google-signin-container');
+    if (!container) return;
+    container.innerHTML = `
+        <button onclick="handleGoogleBtnClick()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:12px;padding:14px;background:#fff;color:#333;border:1px solid #ddd;border-radius:12px;font-size:1rem;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.15)'" onmouseout="this.style.boxShadow=''">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="22" height="22" alt="Google">
+            Lanjutkan dengan Google
+        </button>`;
+}
+
+// Dipanggil dari openAuthModal — coba render GSI button jika sudah siap
+function tryRenderGoogleButton() {
+    const clientId = window.GOOGLE_CLIENT_ID || '';
+    if (!clientId || !window.google?.accounts?.id) return;
+
+    const ready = initGoogleSignIn();
+    if (!ready) return;
+
+    const container = document.getElementById('google-signin-container');
+    if (!container) return;
+
+    try {
+        container.innerHTML = '';
+        const btnWidth = Math.min(container.offsetWidth || 360, 400);
+        google.accounts.id.renderButton(container, {
+            theme: 'outline',
+            size: 'large',
+            width: btnWidth,
+            text: 'continue_with',
+            shape: 'rectangular',
+            logo_alignment: 'left'
+        });
+    } catch {
+        _restoreGoogleBtn();
+    }
+}
+
+// Backward compat — dipanggil dari beberapa tempat
+function signInWithGoogle() { handleGoogleBtnClick(); }
 
 // ============================================================
 // EMAIL LOGIN / REGISTER
@@ -303,26 +349,8 @@ function updateHeaderUI() {
 function openAuthModal() {
     document.getElementById('auth-modal')?.classList.add('active');
     clearAuthForm();
-    // Init Google Sign-In dan render button setelah modal terbuka
-    setTimeout(() => {
-        initGoogleSignIn();
-        const clientId = window.GOOGLE_CLIENT_ID || '';
-        const container = document.getElementById('google-signin-btn');
-        if (container && clientId && window.google?.accounts?.id) {
-            container.innerHTML = '';
-            const btnWidth = Math.min(container.offsetWidth || 360, 400);
-            try {
-                google.accounts.id.renderButton(container, {
-                    theme: 'outline',
-                    size: 'large',
-                    width: btnWidth,
-                    text: 'continue_with',
-                    shape: 'rectangular',
-                    logo_alignment: 'left'
-                });
-            } catch { /* silent — fallback ke email login */ }
-        }
-    }, 100);
+    // Coba render GSI button jika sudah siap, jika tidak biarkan tombol HTML default
+    setTimeout(tryRenderGoogleButton, 150);
 }
 
 function closeAuthModal() {
@@ -569,6 +597,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Expose ke window
 window.signInWithGoogle = signInWithGoogle;
+window.handleGoogleBtnClick = handleGoogleBtnClick;
 window.loginWithEmail = loginWithEmail;
 window.registerWithEmail = registerWithEmail;
 window.logoutUser = logoutUser;
