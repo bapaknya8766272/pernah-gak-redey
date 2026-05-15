@@ -841,7 +841,7 @@
             </div>
             <div class="modal-body">
                 <!-- Google Login Button -->
-                <button id="google-signin-btn" onclick="signInWithGoogle()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:12px;padding:14px;background:#fff;color:#333;border:1px solid #ddd;border-radius:12px;font-size:1rem;font-weight:600;cursor:pointer;margin-bottom:20px;transition:all 0.2s;">
+                <button onclick="signInWithGoogle()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:12px;padding:14px;background:#fff;color:#333;border:1px solid #ddd;border-radius:12px;font-size:1rem;font-weight:600;cursor:pointer;margin-bottom:20px;transition:all 0.2s;" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.15)'" onmouseout="this.style.boxShadow=''">
                     <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="22" height="22" alt="Google">
                     Lanjutkan dengan Google
                 </button>

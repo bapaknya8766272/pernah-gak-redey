@@ -4466,3 +4466,427 @@ window.loadRevenueTarget = loadRevenueTarget;
 window.loadKanbanBoard = loadKanbanBoard;
 window.loadServerStatus = loadServerStatus;
 window.AdminNotif = AdminNotif;
+
+
+// ============================================================
+// 10 FITUR BARU ADMIN v5.0
+// ============================================================
+
+// ── FITUR ADMIN 1: Dark/Light Mode Admin ─────────────────────
+function toggleAdminTheme() {
+    const current = document.documentElement.getAttribute('data-admin-theme') || 'dark';
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-admin-theme', next);
+    localStorage.setItem('admin_theme', next);
+    if (next === 'light') {
+        document.documentElement.style.setProperty('--bg-body', '#f0eeff');
+        document.documentElement.style.setProperty('--bg-card', 'rgba(255,255,255,0.95)');
+        document.documentElement.style.setProperty('--bg-sidebar', '#ede9fe');
+        document.documentElement.style.setProperty('--text-primary', '#1a1040');
+        document.documentElement.style.setProperty('--text-secondary', '#4a3f6b');
+        document.documentElement.style.setProperty('--text-muted', '#7c6fa0');
+        document.documentElement.style.setProperty('--border-color', 'rgba(124,58,237,0.2)');
+    } else {
+        ['--bg-body','--bg-card','--bg-sidebar','--text-primary','--text-secondary','--text-muted','--border-color'].forEach(v => document.documentElement.style.removeProperty(v));
+    }
+    Utils.showToast(`Mode ${next === 'light' ? 'terang' : 'gelap'} aktif`);
+}
+// Init theme dari localStorage
+(function() {
+    const saved = localStorage.getItem('admin_theme');
+    if (saved === 'light') toggleAdminTheme();
+})();
+window.toggleAdminTheme = toggleAdminTheme;
+
+// ── FITUR ADMIN 2: Export PDF Ringkasan ──────────────────────
+async function exportPDFSummary() {
+    const token = AdminAuth.getToken();
+    try {
+        const [orderRes, visitorRes] = await Promise.all([
+            fetch('/api/orders', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ orders: [] })),
+            fetch('/api/visitors', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ stats: {} }))
+        ]);
+        const orders = orderRes.orders || [];
+        const stats = visitorRes.stats || {};
+        const revenue = orders.filter(o => o.status === 'completed').reduce((s, o) => s + (o.total || 0), 0);
+        const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ringkasan ALFA HOSTING</title>
+        <style>body{font-family:Arial,sans-serif;padding:30px;color:#1a1040;}h1{color:#7c3aed;}table{width:100%;border-collapse:collapse;margin-top:20px;}th,td{border:1px solid #ddd;padding:10px;text-align:left;}th{background:#7c3aed;color:white;}.stat{display:inline-block;background:#f0eeff;border-radius:10px;padding:15px 25px;margin:10px;text-align:center;}.stat h3{color:#7c3aed;font-size:1.5rem;margin:0;}.stat p{color:#666;margin:5px 0 0;font-size:0.85rem;}</style></head>
+        <body><h1>📊 Ringkasan ALFA HOSTING</h1><p>Dicetak: ${today}</p>
+        <div><div class="stat"><h3>${Utils.formatRupiah(revenue)}</h3><p>Total Pendapatan</p></div>
+        <div class="stat"><h3>${orders.length}</h3><p>Total Pesanan</p></div>
+        <div class="stat"><h3>${stats.total || 0}</h3><p>Total Pengunjung</p></div>
+        <div class="stat"><h3>${orders.filter(o=>o.status==='completed').length}</h3><p>Pesanan Selesai</p></div></div>
+        <h2>5 Pesanan Terbaru</h2><table><tr><th>Order ID</th><th>Total</th><th>Status</th><th>Tanggal</th></tr>
+        ${orders.slice(0,5).map(o=>`<tr><td>${o.orderId||o._id}</td><td>${Utils.formatRupiah(o.total||0)}</td><td>${o.status}</td><td>${new Date(o.createdAt).toLocaleDateString('id-ID')}</td></tr>`).join('')}
+        </table></body></html>`;
+
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `ringkasan-alfa-${Date.now()}.html`;
+        a.click(); URL.revokeObjectURL(url);
+        Utils.showToast('Ringkasan berhasil diexport!');
+    } catch (e) {
+        Swal.fire({ icon: 'error', title: 'Gagal', text: e.message, background: '#0d0b24', color: '#f0eeff' });
+    }
+}
+window.exportPDFSummary = exportPDFSummary;
+
+// ── FITUR ADMIN 3: Bulk Delete Orders ────────────────────────
+async function bulkDeleteOrders(status) {
+    const label = status === 'cancelled' ? 'dibatalkan' : status === 'pending' ? 'pending' : 'semua';
+    const result = await Swal.fire({
+        title: `Hapus semua order ${label}?`,
+        text: 'Tindakan ini tidak bisa dibatalkan!',
+        icon: 'warning', showCancelButton: true,
+        confirmButtonText: 'Ya, Hapus', cancelButtonText: 'Batal',
+        confirmButtonColor: '#ef4444', background: '#0d0b24', color: '#f0eeff'
+    });
+    if (!result.isConfirmed) return;
+
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch(`/api/orders?bulkDelete=true&status=${status}`, {
+            method: 'DELETE', headers: { 'X-Admin-Token': token }
+        });
+        const data = await res.json();
+        if (res.ok) {
+            addActivityLog('Pesanan', `Bulk delete order ${label}: ${data.deleted || 0} dihapus`);
+            renderOrdersTable();
+            updateStats();
+            Swal.fire({ icon: 'success', title: 'Berhasil!', text: `${data.deleted || 0} order dihapus.`, background: '#0d0b24', color: '#f0eeff', timer: 2000, showConfirmButton: false });
+        } else {
+            throw new Error(data.error || 'Gagal hapus');
+        }
+    } catch (e) {
+        Swal.fire({ icon: 'error', title: 'Gagal', text: e.message, background: '#0d0b24', color: '#f0eeff' });
+    }
+}
+window.bulkDeleteOrders = bulkDeleteOrders;
+
+// ── FITUR ADMIN 4: Filter Orders by Date Range ───────────────
+function filterOrdersByDate() {
+    Swal.fire({
+        title: '<i class="fas fa-calendar" style="color:#7c3aed;margin-right:8px;"></i>Filter Tanggal',
+        html: `
+            <div style="text-align:left;">
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:0.85rem;color:#9b8ec4;display:block;margin-bottom:6px;">Dari Tanggal</label>
+                    <input type="date" id="date-from" style="width:100%;background:#130f2e;border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:10px;color:#f0eeff;font-family:inherit;">
+                </div>
+                <div>
+                    <label style="font-size:0.85rem;color:#9b8ec4;display:block;margin-bottom:6px;">Sampai Tanggal</label>
+                    <input type="date" id="date-to" style="width:100%;background:#130f2e;border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:10px;color:#f0eeff;font-family:inherit;">
+                </div>
+            </div>`,
+        background: '#0d0b24', color: '#f0eeff',
+        showCancelButton: true,
+        confirmButtonText: 'Terapkan', cancelButtonText: 'Reset',
+        confirmButtonColor: '#7c3aed'
+    }).then(async result => {
+        if (result.isConfirmed) {
+            const from = document.getElementById('date-from')?.value;
+            const to   = document.getElementById('date-to')?.value;
+            if (!from && !to) return;
+            await renderOrdersTableFiltered(from, to);
+        } else if (result.dismiss === Swal.DismissReason.cancel) {
+            renderOrdersTable();
+        }
+    });
+}
+
+async function renderOrdersTableFiltered(from, to) {
+    const tbody = document.getElementById('orders-table-body');
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:30px;"><i class="fas fa-spinner fa-spin"></i></td></tr>`;
+    const token = AdminAuth.getToken();
+    try {
+        let url = '/api/orders';
+        if (from || to) url += `?from=${from || ''}&to=${to || ''}`;
+        const res = await fetch(url, { headers: { 'X-Admin-Token': token } });
+        const { orders = [] } = await res.json();
+        // Filter client-side jika API tidak support date filter
+        const filtered = orders.filter(o => {
+            const d = new Date(o.createdAt);
+            if (from && d < new Date(from)) return false;
+            if (to && d > new Date(to + 'T23:59:59')) return false;
+            return true;
+        });
+        if (!filtered.length) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-muted);">Tidak ada pesanan di rentang tanggal ini</td></tr>`;
+            return;
+        }
+        // Render menggunakan fungsi yang sudah ada
+        window._filteredOrders = filtered;
+        renderOrdersTable();
+    } catch { renderOrdersTable(); }
+}
+window.filterOrdersByDate = filterOrdersByDate;
+
+// ── FITUR ADMIN 5: Quick Edit Harga Produk Inline ────────────
+async function quickEditPrice(productId, currentPrice) {
+    const { value: newPrice } = await Swal.fire({
+        title: 'Edit Harga Cepat',
+        input: 'number',
+        inputLabel: 'Harga baru (Rp)',
+        inputValue: currentPrice,
+        inputAttributes: { min: '0', step: '1000' },
+        showCancelButton: true,
+        confirmButtonText: 'Simpan',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#7c3aed',
+        background: '#0d0b24', color: '#f0eeff',
+        inputValidator: v => !v || parseInt(v) <= 0 ? 'Harga harus lebih dari 0' : null
+    });
+    if (!newPrice) return;
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch(`/api/products?id=${productId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+            body: JSON.stringify({ price: parseInt(newPrice) })
+        });
+        if (res.ok) {
+            ProductManager._cache = null;
+            renderProductsTable();
+            addActivityLog('Produk', `Quick edit harga produk ${productId}: ${Utils.formatRupiah(parseInt(newPrice))}`);
+            Utils.showToast(`Harga diupdate: ${Utils.formatRupiah(parseInt(newPrice))}`);
+        }
+    } catch (e) { Utils.showToast('Gagal update harga: ' + e.message, 'error'); }
+}
+window.quickEditPrice = quickEditPrice;
+
+// ── FITUR ADMIN 6: Statistik Voucher Usage ───────────────────
+async function showVoucherStats() {
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch('/api/content?type=vouchers', { headers: { 'X-Admin-Token': token } });
+        const { vouchers = [] } = await res.json();
+        if (!vouchers.length) { Utils.showToast('Belum ada voucher', 'warning'); return; }
+
+        const rows = vouchers.map(v => `
+            <tr>
+                <td><code style="color:#c4b5fd;">${v.code}</code></td>
+                <td>${v.type === 'percent' ? v.value + '%' : Utils.formatRupiah(v.value)}</td>
+                <td>${v.usedCount || 0} / ${v.maxUse || '∞'}</td>
+                <td><span style="color:${v.active ? '#10b981' : '#ef4444'};font-weight:700;">${v.active ? '✅ Aktif' : '❌ Nonaktif'}</span></td>
+                <td>${v.expiry ? new Date(v.expiry).toLocaleDateString('id-ID') : '—'}</td>
+            </tr>`).join('');
+
+        Swal.fire({
+            title: '<i class="fas fa-ticket-alt" style="color:#7c3aed;margin-right:8px;"></i>Statistik Voucher',
+            html: `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+                <thead><tr style="background:rgba(124,58,237,0.15);">
+                    <th style="padding:8px;text-align:left;color:#c4b5fd;">Kode</th>
+                    <th style="padding:8px;text-align:left;color:#c4b5fd;">Nilai</th>
+                    <th style="padding:8px;text-align:left;color:#c4b5fd;">Dipakai</th>
+                    <th style="padding:8px;text-align:left;color:#c4b5fd;">Status</th>
+                    <th style="padding:8px;text-align:left;color:#c4b5fd;">Kadaluarsa</th>
+                </tr></thead><tbody>${rows}</tbody></table></div>`,
+            background: '#0d0b24', color: '#f0eeff', width: '700px',
+            confirmButtonText: 'Tutup', confirmButtonColor: '#7c3aed'
+        });
+    } catch (e) { Utils.showToast('Gagal load voucher: ' + e.message, 'error'); }
+}
+window.showVoucherStats = showVoucherStats;
+
+// ── FITUR ADMIN 7: Broadcast ke Semua Subscriber ─────────────
+async function broadcastToSubscribers() {
+    const { value: formValues } = await Swal.fire({
+        title: '<i class="fas fa-bullhorn" style="color:#7c3aed;margin-right:8px;"></i>Broadcast Newsletter',
+        html: `
+            <div style="text-align:left;">
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:0.85rem;color:#9b8ec4;display:block;margin-bottom:6px;">Judul Pesan</label>
+                    <input type="text" id="bc-title" placeholder="Promo Spesial Hari Ini!"
+                        style="width:100%;background:#130f2e;border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:10px;color:#f0eeff;font-family:inherit;">
+                </div>
+                <div>
+                    <label style="font-size:0.85rem;color:#9b8ec4;display:block;margin-bottom:6px;">Isi Pesan</label>
+                    <textarea id="bc-body" rows="4" placeholder="Halo! Ada promo spesial untuk kamu..."
+                        style="width:100%;background:#130f2e;border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:10px;color:#f0eeff;font-family:inherit;resize:vertical;"></textarea>
+                </div>
+            </div>`,
+        background: '#0d0b24', color: '#f0eeff',
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-paper-plane"></i> Kirim',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#7c3aed',
+        preConfirm: () => {
+            const title = document.getElementById('bc-title')?.value?.trim();
+            const body  = document.getElementById('bc-body')?.value?.trim();
+            if (!title || !body) { Swal.showValidationMessage('Judul dan isi pesan harus diisi'); return false; }
+            return { title, body };
+        }
+    });
+    if (!formValues) return;
+
+    const token = AdminAuth.getToken();
+    try {
+        // Simpan broadcast ke activity log
+        await fetch('/api/content?type=activity-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+            body: JSON.stringify({ category: 'Broadcast', message: `Broadcast dikirim: "${formValues.title}"` })
+        });
+        addActivityLog('Broadcast', `Pesan dikirim: "${formValues.title}"`);
+        Swal.fire({
+            icon: 'success', title: 'Broadcast Dikirim!',
+            text: `Pesan "${formValues.title}" berhasil dicatat. Kirim manual via email/WA ke subscriber.`,
+            background: '#0d0b24', color: '#f0eeff', timer: 3000, showConfirmButton: false
+        });
+    } catch (e) { Utils.showToast('Gagal broadcast: ' + e.message, 'error'); }
+}
+window.broadcastToSubscribers = broadcastToSubscribers;
+
+// ── FITUR ADMIN 8: Auto-Backup Settings ──────────────────────
+async function backupSettings() {
+    const token = AdminAuth.getToken();
+    try {
+        const res = await fetch('/api/settings', { headers: { 'X-Admin-Token': token } });
+        const data = await res.json();
+        // Hapus nilai sensitif sebelum backup
+        const safe = {};
+        Object.entries(data.settings || {}).forEach(([k, v]) => {
+            safe[k] = v === '••••••••' ? '[ENCRYPTED]' : v;
+        });
+        const backup = {
+            timestamp: new Date().toISOString(),
+            version: '5.0',
+            settings: safe
+        };
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `alfa-settings-backup-${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        addActivityLog('Pengaturan', 'Backup settings berhasil didownload');
+        Utils.showToast('Backup settings berhasil! 💾');
+    } catch (e) { Utils.showToast('Gagal backup: ' + e.message, 'error'); }
+}
+window.backupSettings = backupSettings;
+
+// ── FITUR ADMIN 9: Preview Website di Iframe ─────────────────
+function previewWebsite() {
+    Swal.fire({
+        title: '<i class="fas fa-eye" style="color:#7c3aed;margin-right:8px;"></i>Preview Website',
+        html: `<iframe src="index.html" style="width:100%;height:500px;border:none;border-radius:10px;background:#fff;" loading="lazy"></iframe>`,
+        background: '#0d0b24', color: '#f0eeff',
+        width: '90vw',
+        confirmButtonText: 'Tutup',
+        confirmButtonColor: '#7c3aed',
+        showClass: { popup: 'animate__animated animate__fadeIn' }
+    });
+}
+window.previewWebsite = previewWebsite;
+
+// ── FITUR ADMIN 10: Ringkasan Cepat (Quick Stats Popup) ───────
+async function showQuickStats() {
+    const token = AdminAuth.getToken();
+    try {
+        const [orderRes, visitorRes] = await Promise.all([
+            fetch('/api/orders', { headers: { 'X-Admin-Token': token } }).then(r => r.json()).catch(() => ({ orders: [] })),
+            fetch('/api/visitors?type=live').then(r => r.json()).catch(() => ({ live: 0 }))
+        ]);
+        const orders = orderRes.orders || [];
+        const today = new Date().toISOString().split('T')[0];
+        const todayOrders = orders.filter(o => (o.createdAt || '').startsWith(today));
+        const todayRevenue = todayOrders.filter(o => o.status === 'completed').reduce((s, o) => s + (o.total || 0), 0);
+        const pending = orders.filter(o => o.status === 'pending').length;
+
+        Swal.fire({
+            title: '⚡ Ringkasan Cepat',
+            html: `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center;">
+                    <div style="background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.2);border-radius:12px;padding:16px;">
+                        <div style="font-size:1.5rem;font-weight:800;color:#c4b5fd;">${todayOrders.length}</div>
+                        <div style="font-size:0.8rem;color:#9b8ec4;">Order Hari Ini</div>
+                    </div>
+                    <div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);border-radius:12px;padding:16px;">
+                        <div style="font-size:1.2rem;font-weight:800;color:#10b981;">${Utils.formatRupiah(todayRevenue)}</div>
+                        <div style="font-size:0.8rem;color:#9b8ec4;">Revenue Hari Ini</div>
+                    </div>
+                    <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);border-radius:12px;padding:16px;">
+                        <div style="font-size:1.5rem;font-weight:800;color:#f59e0b;">${pending}</div>
+                        <div style="font-size:0.8rem;color:#9b8ec4;">Pending</div>
+                    </div>
+                    <div style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.2);border-radius:12px;padding:16px;">
+                        <div style="font-size:1.5rem;font-weight:800;color:#60a5fa;">${visitorRes.live || 0}</div>
+                        <div style="font-size:0.8rem;color:#9b8ec4;">Online Sekarang</div>
+                    </div>
+                </div>`,
+            background: '#0d0b24', color: '#f0eeff',
+            confirmButtonText: 'OK', confirmButtonColor: '#7c3aed',
+            timer: 10000
+        });
+    } catch (e) { Utils.showToast('Gagal load stats: ' + e.message, 'error'); }
+}
+window.showQuickStats = showQuickStats;
+
+// Tambah tombol-tombol fitur baru ke header admin
+(function addAdminFeatureButtons() {
+    document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+            const actions = document.querySelector('.header-actions');
+            if (!actions) return;
+
+            const btns = [
+                { icon: 'fa-adjust',      title: 'Toggle Tema',        fn: 'toggleAdminTheme()' },
+                { icon: 'fa-bolt',        title: 'Ringkasan Cepat',    fn: 'showQuickStats()' },
+                { icon: 'fa-file-export', title: 'Export PDF',         fn: 'exportPDFSummary()' },
+                { icon: 'fa-eye',         title: 'Preview Website',    fn: 'previewWebsite()' },
+            ];
+
+            btns.forEach(b => {
+                if (document.querySelector(`[onclick="${b.fn}"]`)) return; // skip jika sudah ada
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-secondary btn-sm';
+                btn.title = b.title;
+                btn.setAttribute('onclick', b.fn);
+                btn.innerHTML = `<i class="fas ${b.icon}"></i>`;
+                actions.insertBefore(btn, actions.firstChild);
+            });
+
+            // Tambah tombol ke orders toolbar
+            const orderToolbar = document.querySelector('#orders-section .toolbar-actions');
+            if (orderToolbar && !document.getElementById('btn-date-filter')) {
+                const dateBtn = document.createElement('button');
+                dateBtn.id = 'btn-date-filter';
+                dateBtn.className = 'btn btn-secondary';
+                dateBtn.onclick = filterOrdersByDate;
+                dateBtn.innerHTML = '<i class="fas fa-calendar-alt"></i> Filter Tanggal';
+                orderToolbar.insertBefore(dateBtn, orderToolbar.firstChild);
+
+                const bulkBtn = document.createElement('button');
+                bulkBtn.className = 'btn btn-danger';
+                bulkBtn.onclick = () => bulkDeleteOrders('cancelled');
+                bulkBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Hapus Dibatalkan';
+                orderToolbar.appendChild(bulkBtn);
+            }
+
+            // Tambah tombol ke settings
+            const settingsGrid = document.querySelector('#settings-section .settings-grid');
+            if (settingsGrid && !document.getElementById('backup-settings-card')) {
+                const card = document.createElement('div');
+                card.id = 'backup-settings-card';
+                card.className = 'settings-card';
+                card.innerHTML = `
+                    <div class="settings-header">
+                        <div class="settings-icon"><i class="fas fa-database"></i></div>
+                        <div><h3>Backup & Tools</h3><p>Export data dan tools admin</p></div>
+                    </div>
+                    <div class="settings-body" style="display:flex;flex-direction:column;gap:10px;">
+                        <button class="btn btn-secondary" onclick="backupSettings()"><i class="fas fa-download"></i> Backup Settings</button>
+                        <button class="btn btn-secondary" onclick="exportPDFSummary()"><i class="fas fa-file-pdf"></i> Export Ringkasan</button>
+                        <button class="btn btn-secondary" onclick="showVoucherStats()"><i class="fas fa-ticket-alt"></i> Statistik Voucher</button>
+                        <button class="btn btn-secondary" onclick="broadcastToSubscribers()"><i class="fas fa-bullhorn"></i> Broadcast Newsletter</button>
+                    </div>`;
+                settingsGrid.appendChild(card);
+            }
+        }, 1500);
+    });
+})();

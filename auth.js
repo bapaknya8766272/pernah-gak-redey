@@ -84,26 +84,22 @@ async function authFetch(url, options = {}) {
 // GOOGLE SIGN-IN
 // ============================================================
 let googleInitialized = false;
-let googleAvailable = false; // true jika GSI berhasil init
+let googleAvailable = false;
 
 function initGoogleSignIn() {
     const clientId = window.GOOGLE_CLIENT_ID || '';
     if (!clientId || !window.google?.accounts?.id) return false;
     if (googleInitialized) return googleAvailable;
     googleInitialized = true;
-
     try {
         google.accounts.id.initialize({
             client_id: clientId,
             callback: handleGoogleCallback,
             auto_select: false,
-            cancel_on_tap_outside: true,
-            use_fedcm_for_prompt: true
+            cancel_on_tap_outside: true
         });
         googleAvailable = true;
-    } catch {
-        googleAvailable = false;
-    }
+    } catch { googleAvailable = false; }
     return googleAvailable;
 }
 
@@ -114,9 +110,7 @@ async function handleGoogleCallback(response) {
             method: 'POST',
             body: JSON.stringify({ idToken: response.credential, deviceFingerprint: getDeviceFingerprint() })
         });
-
         if (!ok) throw new Error(data.error || 'Login Google gagal');
-
         AuthState.save(data.token, data.user);
         onLoginSuccess();
     } catch (err) {
@@ -126,95 +120,27 @@ async function handleGoogleCallback(response) {
     }
 }
 
-// Dipanggil saat tombol Google diklik
-function handleGoogleBtnClick() {
+// Satu fungsi sederhana — dipanggil dari onclick tombol
+function signInWithGoogle() {
     const clientId = window.GOOGLE_CLIENT_ID || '';
-
-    // Belum dikonfigurasi sama sekali
-    if (!clientId || clientId.includes('YOUR_CLIENT_ID')) {
-        showAuthError('Google Sign-In belum dikonfigurasi. Gunakan login email di bawah.');
+    if (!clientId) {
+        showAuthError('Google Sign-In belum dikonfigurasi. Gunakan login email.');
         return;
     }
-
-    // GSI library belum load
     if (!window.google?.accounts?.id) {
-        showAuthError('Google Sign-In sedang dimuat. Coba lagi dalam beberapa detik, atau gunakan login email.');
+        showAuthError('Google Sign-In sedang dimuat, coba lagi sebentar.');
         return;
     }
-
-    const ready = initGoogleSignIn();
-    if (!ready) {
-        showAuthError('Google Sign-In tidak tersedia saat ini. Gunakan login email.');
-        return;
-    }
-
-    // Coba render button GSI yang asli menggantikan tombol HTML kita
-    const container = document.getElementById('google-signin-container');
-    if (container) {
-        try {
-            container.innerHTML = ''; // hapus tombol HTML
-            const btnWidth = Math.min(container.offsetWidth || 360, 400);
-            google.accounts.id.renderButton(container, {
-                theme: 'outline',
-                size: 'large',
-                width: btnWidth,
-                text: 'continue_with',
-                shape: 'rectangular',
-                logo_alignment: 'left'
-            });
-            // Setelah render, klik otomatis tombol GSI yang baru
-            setTimeout(() => {
-                const gsiBtn = container.querySelector('[role="button"], button, div[tabindex]');
-                if (gsiBtn) gsiBtn.click();
-            }, 200);
-        } catch {
-            // renderButton gagal — kembalikan tombol HTML dan tampilkan error
-            _restoreGoogleBtn();
-            showAuthError('Google Sign-In tidak tersedia. Pastikan OAuth consent screen sudah di-publish di Google Cloud Console.');
-        }
-    }
-}
-
-// Kembalikan tombol Google HTML jika GSI gagal
-function _restoreGoogleBtn() {
-    const container = document.getElementById('google-signin-container');
-    if (!container) return;
-    container.innerHTML = `
-        <button onclick="handleGoogleBtnClick()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:12px;padding:14px;background:#fff;color:#333;border:1px solid #ddd;border-radius:12px;font-size:1rem;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.15)'" onmouseout="this.style.boxShadow=''">
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="22" height="22" alt="Google">
-            Lanjutkan dengan Google
-        </button>`;
-}
-
-// Dipanggil dari openAuthModal — coba render GSI button jika sudah siap
-function tryRenderGoogleButton() {
-    const clientId = window.GOOGLE_CLIENT_ID || '';
-    if (!clientId || !window.google?.accounts?.id) return;
-
-    const ready = initGoogleSignIn();
-    if (!ready) return;
-
-    const container = document.getElementById('google-signin-container');
-    if (!container) return;
-
+    initGoogleSignIn();
+    // Langsung prompt — paling reliable
     try {
-        container.innerHTML = '';
-        const btnWidth = Math.min(container.offsetWidth || 360, 400);
-        google.accounts.id.renderButton(container, {
-            theme: 'outline',
-            size: 'large',
-            width: btnWidth,
-            text: 'continue_with',
-            shape: 'rectangular',
-            logo_alignment: 'left'
-        });
-    } catch {
-        _restoreGoogleBtn();
-    }
+        google.accounts.id.prompt();
+    } catch { /* silent */ }
 }
 
-// Backward compat — dipanggil dari beberapa tempat
-function signInWithGoogle() { handleGoogleBtnClick(); }
+// Alias untuk backward compat
+function handleGoogleBtnClick() { signInWithGoogle(); }
+function tryRenderGoogleButton() { /* tidak dipakai lagi */ }
 
 // ============================================================
 // EMAIL LOGIN / REGISTER
@@ -349,8 +275,8 @@ function updateHeaderUI() {
 function openAuthModal() {
     document.getElementById('auth-modal')?.classList.add('active');
     clearAuthForm();
-    // Coba render GSI button jika sudah siap, jika tidak biarkan tombol HTML default
-    setTimeout(tryRenderGoogleButton, 150);
+    // Init Google saat modal buka (tidak render button — biarkan user klik sendiri)
+    setTimeout(() => initGoogleSignIn(), 200);
 }
 
 function closeAuthModal() {

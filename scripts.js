@@ -3240,3 +3240,309 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 window.initStickyBuyBtn = initStickyBuyBtn;
+
+
+// ============================================================
+// 10 FITUR BARU WEBSITE v5.0
+// ============================================================
+
+// ── FITUR 1: Back to Top Button ───────────────────────────────
+(function initBackToTop() {
+    const btn = document.createElement('button');
+    btn.id = 'back-to-top';
+    btn.innerHTML = '<i class="fas fa-arrow-up"></i>';
+    btn.title = 'Kembali ke atas';
+    btn.style.cssText = `
+        position:fixed;bottom:90px;right:20px;width:42px;height:42px;
+        background:var(--gradient-primary);color:white;border:none;
+        border-radius:50%;cursor:pointer;z-index:800;display:none;
+        align-items:center;justify-content:center;font-size:1rem;
+        box-shadow:0 4px 20px rgba(124,58,237,0.5);transition:all 0.3s;`;
+    btn.onmouseover = () => btn.style.transform = 'translateY(-3px) scale(1.1)';
+    btn.onmouseout  = () => btn.style.transform = '';
+    btn.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+    document.body.appendChild(btn);
+    window.addEventListener('scroll', () => {
+        btn.style.display = window.scrollY > 400 ? 'flex' : 'none';
+    }, { passive: true });
+})();
+
+// ── FITUR 2: Filter Harga Range ───────────────────────────────
+let priceFilterMin = 0, priceFilterMax = Infinity;
+
+function openPriceFilter() {
+    Swal.fire({
+        title: '<i class="fas fa-filter" style="color:#7c3aed;margin-right:8px;"></i>Filter Harga',
+        html: `
+            <div style="text-align:left;">
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:0.85rem;color:#9b8ec4;display:block;margin-bottom:6px;">Harga Minimum (Rp)</label>
+                    <input type="number" id="pf-min" value="${priceFilterMin || 0}" min="0" placeholder="0"
+                        style="width:100%;background:#130f2e;border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:10px;color:#f0eeff;font-family:inherit;">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:0.85rem;color:#9b8ec4;display:block;margin-bottom:6px;">Harga Maksimum (Rp)</label>
+                    <input type="number" id="pf-max" value="${priceFilterMax === Infinity ? '' : priceFilterMax}" min="0" placeholder="Tidak terbatas"
+                        style="width:100%;background:#130f2e;border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:10px;color:#f0eeff;font-family:inherit;">
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    ${[[0,5000,'< 5rb'],[5000,20000,'5-20rb'],[20000,50000,'20-50rb'],[50000,999999,'> 50rb']].map(([mn,mx,lbl]) =>
+                        `<button onclick="document.getElementById('pf-min').value=${mn};document.getElementById('pf-max').value=${mx}" 
+                            style="padding:5px 12px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);border-radius:20px;color:#c4b5fd;font-size:0.78rem;cursor:pointer;font-family:inherit;">${lbl}</button>`
+                    ).join('')}
+                </div>
+            </div>`,
+        background: '#0d0b24', color: '#f0eeff',
+        showCancelButton: true,
+        confirmButtonText: 'Terapkan',
+        cancelButtonText: 'Reset',
+        confirmButtonColor: '#7c3aed',
+        cancelButtonColor: '#374151'
+    }).then(result => {
+        if (result.isConfirmed) {
+            priceFilterMin = parseInt(document.getElementById('pf-min')?.value || '0') || 0;
+            const maxVal = document.getElementById('pf-max')?.value;
+            priceFilterMax = maxVal ? parseInt(maxVal) : Infinity;
+            renderProducts(window.currentCategory || 'all');
+            Utils.showToast(`Filter harga: ${Utils.formatRupiah(priceFilterMin)} – ${priceFilterMax === Infinity ? '∞' : Utils.formatRupiah(priceFilterMax)}`);
+        } else if (result.dismiss === Swal.DismissReason.cancel) {
+            priceFilterMin = 0; priceFilterMax = Infinity;
+            renderProducts(window.currentCategory || 'all');
+            Utils.showToast('Filter harga direset');
+        }
+    });
+}
+window.openPriceFilter = openPriceFilter;
+window._priceFilter = () => ({ min: priceFilterMin, max: priceFilterMax });
+
+// ── FITUR 3: Order Tracking Modal ─────────────────────────────
+function openOrderTracking() {
+    Swal.fire({
+        title: '<i class="fas fa-search" style="color:#7c3aed;margin-right:8px;"></i>Lacak Pesanan',
+        html: `
+            <div style="text-align:left;">
+                <label style="font-size:0.85rem;color:#9b8ec4;display:block;margin-bottom:6px;">Masukkan Order ID kamu</label>
+                <input type="text" id="track-order-id" placeholder="Contoh: HJBS-ABC123-XYZ"
+                    style="width:100%;background:#130f2e;border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:12px;color:#f0eeff;font-family:inherit;font-size:1rem;text-transform:uppercase;"
+                    oninput="this.value=this.value.toUpperCase()">
+                <div id="track-result" style="margin-top:16px;"></div>
+            </div>`,
+        background: '#0d0b24', color: '#f0eeff',
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-search"></i> Lacak',
+        cancelButtonText: 'Tutup',
+        confirmButtonColor: '#7c3aed',
+        preConfirm: async () => {
+            const orderId = document.getElementById('track-order-id')?.value?.trim();
+            if (!orderId) { Swal.showValidationMessage('Masukkan Order ID'); return false; }
+            const res = document.getElementById('track-result');
+            if (res) res.innerHTML = '<div style="text-align:center;color:#9b8ec4;"><i class="fas fa-spinner fa-spin"></i> Mencari...</div>';
+            try {
+                const r = await fetch(`/api/orders?orderId=${encodeURIComponent(orderId)}`);
+                const data = await r.json();
+                const order = data.order || data.orders?.[0];
+                if (!order) {
+                    if (res) res.innerHTML = '<div style="color:#ef4444;text-align:center;padding:12px;background:rgba(239,68,68,0.1);border-radius:8px;"><i class="fas fa-times-circle"></i> Order tidak ditemukan</div>';
+                    return false;
+                }
+                const statusMap = { pending: ['⏳','Menunggu Pembayaran','#f59e0b'], completed: ['✅','Selesai','#10b981'], cancelled: ['❌','Dibatalkan','#ef4444'] };
+                const [icon, label, color] = statusMap[order.status] || statusMap.pending;
+                if (res) res.innerHTML = `
+                    <div style="background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);border-radius:10px;padding:14px;">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                            <span style="color:#9b8ec4;font-size:0.85rem;">Order ID</span>
+                            <code style="color:#c4b5fd;font-size:0.85rem;">${order.orderId || orderId}</code>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                            <span style="color:#9b8ec4;font-size:0.85rem;">Status</span>
+                            <span style="color:${color};font-weight:700;">${icon} ${label}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                            <span style="color:#9b8ec4;font-size:0.85rem;">Total</span>
+                            <span style="color:#10b981;font-weight:700;">${Utils.formatRupiah(order.total || 0)}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;">
+                            <span style="color:#9b8ec4;font-size:0.85rem;">Tanggal</span>
+                            <span style="font-size:0.85rem;">${new Date(order.createdAt).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'})}</span>
+                        </div>
+                    </div>`;
+                return false; // jangan tutup modal
+            } catch {
+                if (res) res.innerHTML = '<div style="color:#ef4444;text-align:center;">Gagal menghubungi server</div>';
+                return false;
+            }
+        }
+    });
+}
+window.openOrderTracking = openOrderTracking;
+
+// ── FITUR 4: Copy Link Produk ─────────────────────────────────
+function copyProductLink(productId, productName) {
+    const url = `${window.location.origin}${window.location.pathname}?product=${productId}`;
+    navigator.clipboard.writeText(url).then(() => {
+        Utils.showToast(`Link "${productName}" disalin! 🔗`);
+    }).catch(() => {
+        prompt('Copy link produk:', url);
+    });
+}
+window.copyProductLink = copyProductLink;
+
+// ── FITUR 5: Share ke WhatsApp ────────────────────────────────
+function shareProductWA(productId, productName, price) {
+    const url = `${window.location.origin}${window.location.pathname}?product=${productId}`;
+    const msg = `Hei! Cek layanan *${productName}* di ALFA HOSTING — hanya ${Utils.formatRupiah(price)}/bulan! 🚀\n${url}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+}
+window.shareProductWA = shareProductWA;
+
+// ── FITUR 6: Badge "Baru" untuk produk baru (< 7 hari) ────────
+function isNewProduct(product) {
+    if (!product.createdAt) return false;
+    const created = new Date(product.createdAt);
+    return (Date.now() - created.getTime()) < 7 * 24 * 60 * 60 * 1000;
+}
+window.isNewProduct = isNewProduct;
+
+// ── FITUR 7: Notif stok hampir habis ─────────────────────────
+function getStockWarning(product) {
+    if (product.category === 'other') return null;
+    if (product.stock <= 0) return { text: 'Habis', color: '#ef4444', icon: 'fa-times-circle' };
+    if (product.stock <= 3) return { text: `Sisa ${product.stock}!`, color: '#ef4444', icon: 'fa-fire' };
+    if (product.stock <= 10) return { text: `Stok terbatas`, color: '#f59e0b', icon: 'fa-exclamation-triangle' };
+    return null;
+}
+window.getStockWarning = getStockWarning;
+
+// ── FITUR 8: Dark/Light Mode Toggle yang persist ──────────────
+function initThemeToggle() {
+    const saved = localStorage.getItem('theme') || 'dark';
+    applyTheme(saved);
+    const btn = document.getElementById('theme-btn');
+    if (btn) {
+        btn.onclick = () => {
+            const current = document.documentElement.getAttribute('data-theme') || 'dark';
+            const next = current === 'dark' ? 'light' : 'dark';
+            applyTheme(next);
+            localStorage.setItem('theme', next);
+        };
+    }
+}
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    const btn = document.getElementById('theme-btn');
+    if (btn) {
+        const icon = btn.querySelector('i');
+        if (icon) icon.className = theme === 'dark' ? 'fas fa-moon' : 'fas fa-sun';
+    }
+    // Light mode overrides
+    if (theme === 'light') {
+        document.documentElement.style.setProperty('--bg-body', '#f8f7ff');
+        document.documentElement.style.setProperty('--bg-card', 'rgba(255,255,255,0.95)');
+        document.documentElement.style.setProperty('--text-primary', '#1a1040');
+        document.documentElement.style.setProperty('--text-secondary', '#4a3f6b');
+        document.documentElement.style.setProperty('--text-muted', '#7c6fa0');
+        document.documentElement.style.setProperty('--border-color', 'rgba(124,58,237,0.15)');
+    } else {
+        // Reset ke dark mode defaults
+        document.documentElement.style.removeProperty('--bg-body');
+        document.documentElement.style.removeProperty('--bg-card');
+        document.documentElement.style.removeProperty('--text-primary');
+        document.documentElement.style.removeProperty('--text-secondary');
+        document.documentElement.style.removeProperty('--text-muted');
+        document.documentElement.style.removeProperty('--border-color');
+    }
+}
+window.applyTheme = applyTheme;
+
+// ── FITUR 9: Produk dari URL parameter ───────────────────────
+function checkProductFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    const productId = params.get('product');
+    if (!productId) return;
+    setTimeout(() => {
+        const product = ProductManager.getById(productId);
+        if (product) {
+            // Scroll ke section services
+            document.getElementById('services')?.scrollIntoView({ behavior: 'smooth' });
+            // Buka modal produk setelah scroll
+            setTimeout(() => {
+                if (typeof openProductDetailModal === 'function') openProductDetailModal(productId);
+            }, 800);
+        }
+    }, 1500);
+}
+window.checkProductFromURL = checkProductFromURL;
+
+// ── FITUR 10: Floating Cart Summary ──────────────────────────
+function updateFloatingCart() {
+    let floatCart = document.getElementById('float-cart-summary');
+    const count = CartManager.getItemCount();
+    const total = CartManager.getTotal();
+
+    if (count === 0) {
+        if (floatCart) floatCart.style.display = 'none';
+        return;
+    }
+
+    if (!floatCart) {
+        floatCart = document.createElement('div');
+        floatCart.id = 'float-cart-summary';
+        floatCart.style.cssText = `
+            position:fixed;bottom:20px;right:80px;
+            background:var(--gradient-primary);color:white;
+            border-radius:50px;padding:10px 18px;
+            display:flex;align-items:center;gap:10px;
+            font-size:0.85rem;font-weight:700;z-index:800;
+            box-shadow:0 4px 20px rgba(124,58,237,0.5);
+            cursor:pointer;transition:all 0.3s;`;
+        floatCart.onclick = () => document.getElementById('cart')?.scrollIntoView({ behavior: 'smooth' });
+        floatCart.onmouseover = () => floatCart.style.transform = 'translateY(-3px)';
+        floatCart.onmouseout  = () => floatCart.style.transform = '';
+        document.body.appendChild(floatCart);
+    }
+
+    floatCart.style.display = 'flex';
+    floatCart.innerHTML = `<i class="fas fa-shopping-cart"></i> ${count} item · ${Utils.formatRupiah(total)}`;
+}
+window.updateFloatingCart = updateFloatingCart;
+
+// Patch CartManager.updateUI untuk juga update floating cart
+const _origCartUpdateUI = CartManager.updateUI.bind(CartManager);
+CartManager.updateUI = function() {
+    _origCartUpdateUI();
+    updateFloatingCart();
+};
+
+// Init semua fitur baru saat DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+    initThemeToggle();
+    checkProductFromURL();
+    updateFloatingCart();
+    // Tambah tombol filter harga di search bar
+    setTimeout(() => {
+        const searchBar = document.querySelector('.product-search-bar');
+        if (searchBar && !document.getElementById('price-filter-btn')) {
+            const btn = document.createElement('button');
+            btn.id = 'price-filter-btn';
+            btn.innerHTML = '<i class="fas fa-filter"></i>';
+            btn.title = 'Filter Harga';
+            btn.style.cssText = 'background:var(--bg-glass);border:1px solid var(--border-color);border-radius:8px;padding:8px 12px;color:var(--text-secondary);cursor:pointer;transition:all 0.2s;margin-left:8px;';
+            btn.onclick = openPriceFilter;
+            btn.onmouseover = () => { btn.style.background = 'rgba(124,58,237,0.15)'; btn.style.color = 'var(--primary)'; };
+            btn.onmouseout  = () => { btn.style.background = 'var(--bg-glass)'; btn.style.color = 'var(--text-secondary)'; };
+            searchBar.appendChild(btn);
+        }
+        // Tambah tombol lacak pesanan di FAB
+        const fabItems = document.getElementById('fab-items');
+        if (fabItems && !document.getElementById('fab-track')) {
+            const trackBtn = document.createElement('button');
+            trackBtn.id = 'fab-track';
+            trackBtn.className = 'fab-item';
+            trackBtn.onclick = openOrderTracking;
+            trackBtn.title = 'Lacak Pesanan';
+            trackBtn.innerHTML = '<i class="fas fa-search"></i><span class="fab-label">Lacak Order</span>';
+            fabItems.appendChild(trackBtn);
+        }
+    }, 1000);
+});
