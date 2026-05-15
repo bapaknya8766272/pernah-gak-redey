@@ -1469,25 +1469,21 @@ const QRISPayment = {
         clearInterval(this._state.interval);
         this._state.active = false;
 
-        // Update status order ke completed di MongoDB
-        fetch(`/api/orders`, {
-            method: 'GET',
-            headers: { 'X-Admin-Token': '' }
-        }).then(async () => {
-            // Cari order by orderId dan update status
-            const res = await fetch('/api/orders', { headers: { 'X-Admin-Token': '' } });
-            if (res.ok) {
-                const data = await res.json();
-                const order = data.orders?.find(o => o.orderId === this._state.orderId);
-                if (order?._id) {
-                    fetch(`/api/orders?id=${order._id}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': '' },
-                        body: JSON.stringify({ status: 'completed' })
-                    }).catch(() => {});
+        // ── Update status order ke completed via endpoint publik ──
+        const orderId = this._state.orderId;
+        const transactionId = this._state.transactionId || '';
+        if (orderId) {
+            fetch('/api/orders?action=complete-by-payment', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ orderId, transactionId })
+            }).then(async res => {
+                if (!res.ok) {
+                    const d = await res.json().catch(() => ({}));
+                    console.warn('[QRIS] Gagal update status order:', d.error || res.status);
                 }
-            }
-        }).catch(() => {});
+            }).catch(err => console.warn('[QRIS] Update order error:', err.message));
+        }
 
         const trxId = 'ALFA' + Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
 
@@ -3538,16 +3534,6 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.onmouseout  = () => { btn.style.background = 'var(--bg-glass)'; btn.style.color = 'var(--text-secondary)'; };
             searchBar.appendChild(btn);
         }
-        // Tambah tombol lacak pesanan di FAB
-        const fabItems = document.getElementById('fab-items');
-        if (fabItems && !document.getElementById('fab-track')) {
-            const trackBtn = document.createElement('button');
-            trackBtn.id = 'fab-track';
-            trackBtn.className = 'fab-item';
-            trackBtn.onclick = openOrderTracking;
-            trackBtn.title = 'Lacak Pesanan';
-            trackBtn.innerHTML = '<i class="fas fa-search"></i><span class="fab-label">Lacak Order</span>';
-            fabItems.appendChild(trackBtn);
-        }
+        // Tambah tombol lacak pesanan di FAB — sudah ada di HTML, tidak perlu inject
     }, 1000);
 });

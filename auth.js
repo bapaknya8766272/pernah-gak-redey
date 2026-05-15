@@ -131,11 +131,39 @@ function signInWithGoogle() {
         showAuthError('Google Sign-In sedang dimuat, coba lagi sebentar.');
         return;
     }
+
     initGoogleSignIn();
-    // Langsung prompt — paling reliable
+
+    // Gunakan renderButton + klik otomatis — lebih reliable dari prompt()
+    // karena prompt() sering gagal dengan FedCM error
+    const tempDiv = document.createElement('div');
+    tempDiv.style.cssText = 'position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;overflow:hidden;';
+    document.body.appendChild(tempDiv);
+
     try {
-        google.accounts.id.prompt();
-    } catch { /* silent */ }
+        google.accounts.id.renderButton(tempDiv, {
+            type: 'standard',
+            theme: 'outline',
+            size: 'large',
+            width: 300
+        });
+        // Klik tombol yang dirender Google
+        setTimeout(() => {
+            const gBtn = tempDiv.querySelector('div[role="button"], button, iframe');
+            if (gBtn) {
+                gBtn.click();
+            } else {
+                // Fallback: coba prompt biasa
+                try { google.accounts.id.prompt(); } catch { /* silent */ }
+            }
+            // Bersihkan setelah 3 detik
+            setTimeout(() => { if (tempDiv.parentNode) tempDiv.remove(); }, 3000);
+        }, 300);
+    } catch {
+        tempDiv.remove();
+        // Fallback terakhir: prompt
+        try { google.accounts.id.prompt(); } catch { /* silent */ }
+    }
 }
 
 // Alias untuk backward compat
